@@ -2,6 +2,12 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [2.0.0] - 2026-06-27
+
+### Changed
+- Migración completa a TypeScript con módulos ES (`src/lib/*.ts`, `src/runtime/`).
+- Eliminado uso de `window.*` en el núcleo del plugin.
+
 ## [1.1.0] - 2026-06-27
 
 ### Added

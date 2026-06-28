@@ -1,75 +1,32 @@
 import { ItemView, Notice, Plugin, WorkspaceLeaf } from "obsidian";
-import "./legacy";
+import { ScriptsRuntime } from "./runtime/scripts-runtime";
+import { KanbanDB } from "./lib/kanban_db";
+import { KanbanUI } from "./lib/kanban_ui";
+import { TaskBoardBridgeFactory } from "./lib/task-board-bridge";
+import type { TaskBoardApi } from "./types";
+
+import "./lib/kanban_modals";
 
 const PLUGIN_ID = "vault-task-board";
 const PLUGIN_ROOT = `.obsidian/plugins/${PLUGIN_ID}`;
 const LEGACY_DB = ".obsidian/scripts/kanban_tareas.db";
 
-declare global {
-    interface Window {
-        ScriptsRuntime: {
-            configure: (app: unknown, opts?: { sqlJsRel?: string; sqlWasmRel?: string }) => void;
-            initSqlJs: () => Promise<unknown>;
-            puedeUsarFs: () => boolean;
-            leerBinarioAsync: (path: string) => Promise<Uint8Array | null>;
-            migrarArchivoBinario: (legacy: string, dest: string) => Promise<boolean>;
-        };
-        KanbanDB: {
-            DB_RELATIVE: string;
-            init: (SQL: unknown, dbPath: string) => Promise<unknown>;
-        };
-        KanbanUI: {
-            injectStyles: () => void;
-            renderDashboard: (
-                container: HTMLElement,
-                db: unknown,
-                dbPath: string,
-                proyectoFiltro: string,
-                setProyectoFiltro: (p: string) => void,
-                mostrarBloqueadas: boolean,
-                setMostrarBloqueadas: (v: boolean) => void,
-                mostrarCompletadas: boolean,
-                setMostrarCompletadas: (v: boolean) => void
-            ) => Promise<void>;
-        };
-        TaskBoardBridgeFactory: (fn: () => unknown) => TaskBoardApi;
-        TaskBoardBridge?: TaskBoardApi;
-    }
-}
-
-export interface TaskBoardApi {
-    PLUGIN_ID: string;
-    isAvailable: () => boolean;
-    dbPath: () => string;
-    notaConMarcaAgenda: (notas: string, agendaId: string) => string;
-    buscarIdPorAgendaId: (agendaId: string) => number | null | undefined;
-    obtenerTodas: () => Array<{ id: number; estado: string }>;
-    crearTarea: (datos: Record<string, unknown>) => number;
-    actualizarTarea: (tareaId: number, datos: Record<string, unknown>) => number | undefined;
-    eliminarTarea: (tareaId: number) => void;
-    emitChange: (app: unknown) => void;
-}
-
 export const VIEW_TYPE = "vault-task-board-dashboard";
 
 export default class TaskBoardPlugin extends Plugin {
     api!: TaskBoardApi;
-    private sql: unknown = null;
-    private ready = false;
 
     async onload(): Promise<void> {
-        window.ScriptsRuntime.configure(this.app, {
+        ScriptsRuntime.configure(this.app, {
             sqlJsRel: `${PLUGIN_ROOT}/assets/sql-wasm.js`,
             sqlWasmRel: `${PLUGIN_ROOT}/assets/sql-wasm.wasm`
         });
 
-        const dbPath = window.KanbanDB.DB_RELATIVE;
-        if (await window.ScriptsRuntime.migrarArchivoBinario(LEGACY_DB, dbPath)) {
+        if (await ScriptsRuntime.migrarArchivoBinario(LEGACY_DB, KanbanDB.DB_RELATIVE)) {
             new Notice("Task Board: base de datos migrada a plugins-data.");
         }
 
-        this.api = window.TaskBoardBridgeFactory(() => this.sql);
-        window.TaskBoardBridge = this.api;
+        this.api = TaskBoardBridgeFactory(() => this.sql) as TaskBoardApi;
 
         this.registerView(VIEW_TYPE, (leaf) => new TaskBoardView(leaf, this));
         this.addRibbonIcon("layout-dashboard", "Task Board", () => this.activateView());
@@ -84,28 +41,20 @@ export default class TaskBoardPlugin extends Plugin {
         });
     }
 
-    onunload(): void {
-        if (window.TaskBoardBridge === this.api) {
-            delete window.TaskBoardBridge;
-        }
-    }
+    private sql: unknown = null;
 
     async ensureSql(): Promise<unknown> {
-        if (!this.sql) {
-            this.sql = await window.ScriptsRuntime.initSqlJs();
-            this.ready = true;
-        }
+        if (!this.sql) this.sql = await ScriptsRuntime.initSqlJs();
         return this.sql;
     }
 
     private async activateView(): Promise<void> {
-        const { workspace } = this.app;
-        let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
+        let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
         if (!leaf) {
-            leaf = workspace.getLeaf(true);
+            leaf = this.app.workspace.getLeaf(true);
             await leaf.setViewState({ type: VIEW_TYPE, active: true });
         }
-        workspace.revealLeaf(leaf);
+        this.app.workspace.revealLeaf(leaf);
     }
 }
 
@@ -133,7 +82,7 @@ class TaskBoardView extends ItemView {
     async onOpen(): Promise<void> {
         await this.render();
         this.registerEvent(
-            // @ts-expect-error evento personalizado entre plugins locales
+            // @ts-expect-error evento personalizado
             this.app.workspace.on("vault-task-board:changed", () => this.render())
         );
     }
@@ -149,26 +98,26 @@ class TaskBoardView extends ItemView {
 
         try {
             const SQL = await this.plugin.ensureSql();
-            const dbPath = window.KanbanDB.DB_RELATIVE;
-            if (!window.ScriptsRuntime.puedeUsarFs()) {
-                await window.ScriptsRuntime.leerBinarioAsync(dbPath);
+            const dbPath = KanbanDB.DB_RELATIVE;
+            if (!ScriptsRuntime.puedeUsarFs()) {
+                await ScriptsRuntime.leerBinarioAsync(dbPath);
             }
-            let db = await window.KanbanDB.init(SQL, dbPath);
-            window.KanbanUI.injectStyles();
+            let db = await KanbanDB.init(SQL, dbPath);
+            KanbanUI.injectStyles();
 
             const ejecutar = async () => {
-                db = await window.KanbanDB.init(SQL, dbPath);
+                db = await KanbanDB.init(SQL, dbPath);
                 root.empty();
-                await window.KanbanUI.renderDashboard(
+                await KanbanUI.renderDashboard(
                     root, db, dbPath,
                     this.proyectoFiltro,
-                    (p) => { this.proyectoFiltro = p; void ejecutar(); },
+                    (p: string) => { this.proyectoFiltro = p; void ejecutar(); },
                     this.mostrarBloqueadas,
-                    (v) => { this.mostrarBloqueadas = v; void ejecutar(); },
+                    (v: boolean) => { this.mostrarBloqueadas = v; void ejecutar(); },
                     this.mostrarCompletadas,
-                    (v) => { this.mostrarCompletadas = v; void ejecutar(); }
+                    (v: boolean) => { this.mostrarCompletadas = v; void ejecutar(); }
                 );
-                window.TaskBoardBridge?.emitChange(this.app);
+                this.plugin.api.emitChange(this.app);
             };
             await ejecutar();
         } catch (e) {
@@ -178,3 +127,5 @@ class TaskBoardView extends ItemView {
         }
     }
 }
+
+export type { TaskBoardApi };

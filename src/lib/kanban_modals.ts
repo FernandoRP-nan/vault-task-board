@@ -1,6 +1,11 @@
+/* kanban_modals.ts — migrado a módulo TS */
+// @ts-nocheck
+import { KanbanDB } from "./kanban_db";
+import { Modal, Setting, SuggestModal, Notice } from "obsidian";
+
 // kanban_modals.js - Modales nativos para crear y editar tareas
 
-class ProyectoSuggestModal extends window.SuggestModal {
+class ProyectoSuggestModal extends SuggestModal {
     constructor(app, proyectos, onSelect) {
         super(app);
         this.proyectos = proyectos;
@@ -25,7 +30,7 @@ class ProyectoSuggestModal extends window.SuggestModal {
     }
 }
 
-class TareaRequisitoSuggestModal extends window.SuggestModal {
+class TareaRequisitoSuggestModal extends SuggestModal {
     constructor(app, tareas, idsExcluidos, onSelect, proyectoFiltro = "") {
         super(app);
         const excluir = new Set(idsExcluidos || []);
@@ -62,7 +67,7 @@ class TareaRequisitoSuggestModal extends window.SuggestModal {
     }
 }
 
-class KanbanImagenSuggestModal extends window.SuggestModal {
+class KanbanImagenSuggestModal extends SuggestModal {
     constructor(app, onSelect) {
         super(app);
         this.onSelect = onSelect;
@@ -94,7 +99,7 @@ class KanbanImagenSuggestModal extends window.SuggestModal {
     }
 }
 
-class TareaFormModal extends window.Modal {
+class TareaFormModal extends Modal {
     constructor(app, db, dbPath, datosEdicion, onSaved, proyectoPredeterminado = "") {
         super(app);
         this.db = db;
@@ -130,7 +135,7 @@ class TareaFormModal extends window.Modal {
                 const archivo = input.files?.[0];
                 if (!archivo) return resolve(null);
                 try {
-                    const carpeta = window.KanbanDB.KANBAN_IMAGEN_CARPETA;
+                    const carpeta = KanbanDB.KANBAN_IMAGEN_CARPETA;
                     let acum = "";
                     for (const parte of carpeta.split("/").filter(Boolean)) {
                         acum = acum ? `${acum}/${parte}` : parte;
@@ -149,10 +154,10 @@ class TareaFormModal extends window.Modal {
                         destino = `${carpeta}/${base}-${n++}${ext}`;
                     }
                     await this.app.vault.createBinary(destino, new Uint8Array(await archivo.arrayBuffer()));
-                    new window.Notice("📷 Imagen guardada en la bóveda");
+                    new Notice("📷 Imagen guardada en la bóveda");
                     resolve(destino);
                 } catch (err) {
-                    new window.Notice("❌ No se pudo guardar la imagen: " + err.message);
+                    new Notice("❌ No se pudo guardar la imagen: " + err.message);
                     resolve(null);
                 }
             };
@@ -161,7 +166,7 @@ class TareaFormModal extends window.Modal {
     }
 
     _obtenerTareas() {
-        return window.KanbanDB.obtenerTodas(this.db);
+        return KanbanDB.obtenerTodas(this.db);
     }
 
     _obtenerTareasPorProyecto(proyecto) {
@@ -184,7 +189,7 @@ class TareaFormModal extends window.Modal {
 
     _compactarRequisitosSeleccionados() {
         const mapa = new Map(this._obtenerTareas().map(t => [t.id, t]));
-        this.requisitosSeleccionados = window.KanbanDB._filtrarRequisitosSinAncestros(
+        this.requisitosSeleccionados = KanbanDB._filtrarRequisitosSinAncestros(
             this.requisitosSeleccionados, mapa
         );
     }
@@ -221,7 +226,7 @@ class TareaFormModal extends window.Modal {
                 type: "text", placeholder: "Escribe o selecciona un proyecto",
                 cls: "kanban-input", attr: { "data-kanban-in-proyecto": "1" }
             });
-            const proyectosExistentes = window.KanbanDB.obtenerProyectos(this.db);
+            const proyectosExistentes = KanbanDB.obtenerProyectos(this.db);
             if (proyectosExistentes.length > 0) {
                 const datalistId = `kanban-proyectos-${Date.now()}`;
                 const datalist = w.createEl("datalist", { attr: { id: datalistId } });
@@ -252,7 +257,7 @@ class TareaFormModal extends window.Modal {
             chipsContainer.empty();
             const todas = this._obtenerTareas();
             const mapa = new Map(todas.map(t => [t.id, t]));
-            const visibles = window.KanbanDB._filtrarRequisitosSinAncestros(this.requisitosSeleccionados, mapa);
+            const visibles = KanbanDB._filtrarRequisitosSinAncestros(this.requisitosSeleccionados, mapa);
             if (visibles.length === 0) {
                 chipsContainer.createEl("span", {
                     text: "Sin requisitos",
@@ -279,15 +284,15 @@ class TareaFormModal extends window.Modal {
             const proyectoActual = inProyecto.value.trim();
             const tareasDisponibles = this._obtenerTareasPorProyecto(proyectoActual);
             if (proyectoActual && tareasDisponibles.length === 0) {
-                new window.Notice("⚠️ No hay otras tareas en este proyecto para usar como requisito.");
+                new Notice("⚠️ No hay otras tareas en este proyecto para usar como requisito.");
                 return;
             }
-            const idsExcluidos = window.KanbanDB.obtenerIdsExcluidosParaSugerenciaRequisitos(
+            const idsExcluidos = KanbanDB.obtenerIdsExcluidosParaSugerenciaRequisitos(
                 this.db, esEdicion ? this.datos.id : null, this.requisitosSeleccionados
             );
             const tareasElegibles = tareasDisponibles.filter(t => !idsExcluidos.includes(t.id));
             if (tareasElegibles.length === 0) {
-                new window.Notice("⚠️ No hay más tareas válidas como requisito.");
+                new Notice("⚠️ No hay más tareas válidas como requisito.");
                 return;
             }
             new TareaRequisitoSuggestModal(this.app, tareasElegibles, idsExcluidos, (tarea) => {
@@ -402,7 +407,7 @@ class TareaFormModal extends window.Modal {
             if (ruta) agregarImagen(ruta);
         };
 
-        const proyectosExistentes = window.KanbanDB.obtenerProyectos(this.db);
+        const proyectosExistentes = KanbanDB.obtenerProyectos(this.db);
         const btnElegirProyecto = colIzq.querySelector("[data-kanban-proyecto-btn]");
         if (btnElegirProyecto) {
             btnElegirProyecto.onclick = (e) => {
@@ -425,7 +430,7 @@ class TareaFormModal extends window.Modal {
                 style: "margin-right: auto; color: var(--text-error); border-color: var(--text-error);"
             });
             btnEliminar.onclick = () => {
-                const dependientes = window.KanbanDB.obtenerDependientesDe(this.db, this.datos.id);
+                const dependientes = KanbanDB.obtenerDependientesDe(this.db, this.datos.id);
                 let mensaje = `¿Eliminar "${this.datos.texto}"? Esta acción no se puede deshacer.`;
                 if (dependientes.length > 0) {
                     const nombres = dependientes.slice(0, 3).map(t => t.texto).join(", ");
@@ -435,13 +440,13 @@ class TareaFormModal extends window.Modal {
                 if (!confirm(mensaje)) return;
 
                 try {
-                    window.KanbanDB.eliminarTarea(this.db, this.dbPath, this.datos.id);
-                    new window.Notice("🗑️ Tarea eliminada.");
+                    KanbanDB.eliminarTarea(this.db, this.dbPath, this.datos.id);
+                    new Notice("🗑️ Tarea eliminada.");
                     this.onSaved();
                     this.close();
                 } catch (err) {
                     console.error("Error eliminando tarea:", err);
-                    new window.Notice("❌ No se pudo eliminar la tarea.");
+                    new Notice("❌ No se pudo eliminar la tarea.");
                 }
             };
         }
@@ -459,12 +464,12 @@ class TareaFormModal extends window.Modal {
             const estado = inEstado.value;
 
             if (!texto || !proyecto) {
-                new window.Notice("⚠️ Texto y proyecto son obligatorios.");
+                new Notice("⚠️ Texto y proyecto son obligatorios.");
                 return;
             }
 
             if (esEdicion && this.requisitosSeleccionados.includes(this.datos.id)) {
-                new window.Notice("❌ Una tarea no puede depender de sí misma.");
+                new Notice("❌ Una tarea no puede depender de sí misma.");
                 return;
             }
 
@@ -482,17 +487,17 @@ class TareaFormModal extends window.Modal {
                     requisito_ids: [...this.requisitosSeleccionados]
                 };
                 if (!esEdicion) {
-                    window.KanbanDB.crearTarea(this.db, this.dbPath, payload);
-                    new window.Notice("✅ Tarea creada correctamente.");
+                    KanbanDB.crearTarea(this.db, this.dbPath, payload);
+                    new Notice("✅ Tarea creada correctamente.");
                 } else {
-                    window.KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, payload);
-                    new window.Notice("🔄 Tarea actualizada.");
+                    KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, payload);
+                    new Notice("🔄 Tarea actualizada.");
                 }
                 this.onSaved();
                 this.close();
             } catch (err) {
                 console.error("Error guardando tarea:", err);
-                new window.Notice("❌ Error al guardar en la base de datos.");
+                new Notice("❌ Error al guardar en la base de datos.");
             }
         };
     }
@@ -502,7 +507,7 @@ class TareaFormModal extends window.Modal {
     }
 }
 
-class ProyectosGestionModal extends window.Modal {
+class ProyectosGestionModal extends Modal {
     constructor(app, db, dbPath, proyectoFiltro, setProyectoFiltro, onSaved) {
         super(app);
         this.db = db;
@@ -543,22 +548,22 @@ class ProyectosGestionModal extends window.Modal {
 
                 try {
                     if (esArchivado) {
-                        window.KanbanDB.restaurarProyecto(this.db, this.dbPath, p.nombre);
-                        new window.Notice(`↩️ Proyecto "${p.nombre}" restaurado.`);
+                        KanbanDB.restaurarProyecto(this.db, this.dbPath, p.nombre);
+                        new Notice(`↩️ Proyecto "${p.nombre}" restaurado.`);
                     } else {
-                        window.KanbanDB.archivarProyecto(this.db, this.dbPath, p.nombre);
+                        KanbanDB.archivarProyecto(this.db, this.dbPath, p.nombre);
                         if (this.proyectoFiltro === p.nombre) {
                             this.proyectoFiltro = "";
                             this.setProyectoFiltro("");
                         }
-                        new window.Notice(`📦 Proyecto "${p.nombre}" archivado.`);
+                        new Notice(`📦 Proyecto "${p.nombre}" archivado.`);
                     }
                     this.onSaved();
                     this.contentEl.empty();
                     this.onOpen();
                 } catch (err) {
                     console.error(`Error al ${accion} proyecto:`, err);
-                    new window.Notice(`❌ No se pudo ${verbo} el proyecto.`);
+                    new Notice(`❌ No se pudo ${verbo} el proyecto.`);
                 }
             };
         });
@@ -575,7 +580,7 @@ class ProyectosGestionModal extends window.Modal {
             style: "color: var(--text-muted); font-size: 0.9em; margin: 0 0 20px 0;"
         });
 
-        const todos = window.KanbanDB.obtenerProyectos(this.db, { soloActivos: false });
+        const todos = KanbanDB.obtenerProyectos(this.db, { soloActivos: false });
         const activos = todos.filter(p => !p.archivado);
         const archivados = todos.filter(p => p.archivado);
 
@@ -602,7 +607,7 @@ class ProyectosGestionModal extends window.Modal {
     }
 }
 
-window.KanbanModals = {
+export const KanbanModals = {
     TareaFormModal,
     TareaRequisitoSuggestModal,
     ProyectoSuggestModal,

@@ -1,11 +1,17 @@
+/* kanban_ui.ts — migrado a módulo TS */
+// @ts-nocheck
+import { KanbanDB } from "./kanban_db";
+import { KanbanModals } from "./kanban_modals";
+import { Modal, Setting, SuggestModal, Notice } from "obsidian";
+
 /* kanban_ui.js - Mapa Dr. Stone (Mermaid) + Tablero Kanban con Drag & Drop */
 
-window.KanbanUI = {
+export const KanbanUI = {
     ESTADOS: ["Por Hacer", "En Proceso", "Terminado"],
     MIME_TAREA_DRAG: "application/x-kanban-tarea-id",
 
     _extraerTareaIdDesdeDataTransfer: (dataTransfer) => {
-        const custom = dataTransfer.getData(window.KanbanUI.MIME_TAREA_DRAG);
+        const custom = dataTransfer.getData(KanbanUI.MIME_TAREA_DRAG);
         if (custom) return parseInt(custom, 10) || null;
         const plain = dataTransfer.getData("text/plain");
         return plain ? parseInt(plain, 10) || null : null;
@@ -13,7 +19,7 @@ window.KanbanUI = {
 
     _marcarDatosDragTarea: (dataTransfer, tareaId) => {
         const id = String(tareaId);
-        dataTransfer.setData(window.KanbanUI.MIME_TAREA_DRAG, id);
+        dataTransfer.setData(KanbanUI.MIME_TAREA_DRAG, id);
         dataTransfer.setData("text/plain", id);
         dataTransfer.effectAllowed = "all";
     },
@@ -635,7 +641,7 @@ window.KanbanUI = {
     },
 
     _esBloqueada: (tarea, mapaTareas) => {
-        const ids = window.KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas);
+        const ids = KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas);
         if (ids.length === 0) return false;
         return ids.some(reqId => {
             const req = mapaTareas.get(reqId);
@@ -644,7 +650,7 @@ window.KanbanUI = {
     },
 
     _requisitosVisibles: (tarea, mapaTareas) =>
-        window.KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas),
+        KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas),
 
     _sanitizarMermaid: (texto) =>
         String(texto).replace(/["\[\]{}|#;]/g, " ").replace(/\n/g, " ").trim(),
@@ -659,7 +665,7 @@ window.KanbanUI = {
     ],
 
     _colorProyecto: (indice) =>
-        window.KanbanUI._PALETA_PROYECTO[indice % window.KanbanUI._PALETA_PROYECTO.length],
+        KanbanUI._PALETA_PROYECTO[indice % KanbanUI._PALETA_PROYECTO.length],
 
     _ordenarPorProyecto: (tareas) =>
         [...tareas].sort((a, b) =>
@@ -668,7 +674,7 @@ window.KanbanUI = {
 
     _agruparPorProyecto: (tareas) => {
         const mapa = new Map();
-        window.KanbanUI._ordenarPorProyecto(tareas).forEach(t => {
+        KanbanUI._ordenarPorProyecto(tareas).forEach(t => {
             if (!mapa.has(t.proyecto)) mapa.set(t.proyecto, []);
             mapa.get(t.proyecto).push(t);
         });
@@ -722,7 +728,7 @@ window.KanbanUI = {
         const renderId = `kanban-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
         try {
-            const api = await window.KanbanUI._obtenerApiMermaid();
+            const api = await KanbanUI._obtenerApiMermaid();
 
             if (typeof api.initialize === "function" && !window._kanbanMermaidInit) {
                 api.initialize({
@@ -767,7 +773,7 @@ window.KanbanUI = {
 
         let nodo = elemento;
         while (nodo && nodo !== svgRoot) {
-            const id = window.KanbanUI._parsearTareaIdDesdeDomId(nodo.id);
+            const id = KanbanUI._parsearTareaIdDesdeDomId(nodo.id);
             if (id) return id;
             nodo = nodo.parentElement;
         }
@@ -780,7 +786,7 @@ window.KanbanUI = {
 
         const idsVinculados = new Set();
         svg.querySelectorAll("[id]").forEach(el => {
-            const tareaId = window.KanbanUI._parsearTareaIdDesdeDomId(el.id);
+            const tareaId = KanbanUI._parsearTareaIdDesdeDomId(el.id);
             if (!tareaId) return;
             const nodo = el.closest("g.node") || el.closest("g") || el;
             nodo.dataset.tareaId = String(tareaId);
@@ -790,7 +796,7 @@ window.KanbanUI = {
         // Respaldo: vincular por texto visible del nodo
         tareas.forEach(t => {
             if (idsVinculados.has(t.id)) return;
-            const objetivo = window.KanbanUI._sanitizarMermaid(t.texto).toLowerCase();
+            const objetivo = KanbanUI._sanitizarMermaid(t.texto).toLowerCase();
             if (!objetivo) return;
 
             const textos = svg.querySelectorAll("text, foreignObject p, foreignObject span, .nodeLabel");
@@ -847,16 +853,16 @@ window.KanbanUI = {
     },
 
     _abrirEdicionTarea: (db, dbPath, tareaId) => {
-        const actualizada = window.KanbanDB.obtenerTodas(db).find(x => x.id === tareaId);
+        const actualizada = KanbanDB.obtenerTodas(db).find(x => x.id === tareaId);
         if (!actualizada) return;
-        new window.KanbanModals.TareaFormModal(
+        new KanbanModals.TareaFormModal(
             app, db, dbPath, actualizada, () => window.ejecutarRenderKanban()
         ).open();
     },
 
     _enlazarClicksMermaidDom: (hostEl, tareas, db, dbPath) => {
-        window.KanbanUI._etiquetarNodosMermaid(hostEl, tareas);
-        window.KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath);
+        KanbanUI._etiquetarNodosMermaid(hostEl, tareas);
+        KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath);
     },
 
     // Elige el overlay cuyo centro está más cerca del puntero (evita tomar el último del DOM)
@@ -908,7 +914,7 @@ window.KanbanUI = {
         const limpiarDestino = () => {
             if (overlayDestino) {
                 overlayDestino.classList.remove("kanban-mermaid-drop-over");
-                const nodo = window.KanbanUI._nodoSvgDesdeOverlay(svg, overlayDestino);
+                const nodo = KanbanUI._nodoSvgDesdeOverlay(svg, overlayDestino);
                 nodo?.classList.remove("kanban-mermaid-drop-over");
                 overlayDestino = null;
             }
@@ -927,21 +933,21 @@ window.KanbanUI = {
 
             try {
                 // El chip sobre el que sueltas (requisitoId) pasa a ser prerequisito del arrastrado
-                const resultado = window.KanbanDB.agregarRequisito(db, dbPath, arrastradoId, requisitoId);
+                const resultado = KanbanDB.agregarRequisito(db, dbPath, arrastradoId, requisitoId);
                 if (resultado.agregado) {
-                    const todas = window.KanbanDB.obtenerTodas(db);
+                    const todas = KanbanDB.obtenerTodas(db);
                     const arrastrado = todas.find(t => t.id === arrastradoId);
                     const requisito = todas.find(t => t.id === requisitoId);
-                    new window.Notice(
+                    new Notice(
                         `🔗 "${arrastrado?.texto || `#${arrastradoId}`}" ahora requiere "${requisito?.texto || `#${requisitoId}`}"`
                     );
                     window.ejecutarRenderKanban();
                 } else if (resultado.motivo === "ya_existe") {
-                    new window.Notice("ℹ️ Ese requisito ya estaba definido.");
+                    new Notice("ℹ️ Ese requisito ya estaba definido.");
                 }
             } catch (err) {
                 console.error("Error al vincular requisito:", err);
-                new window.Notice(`❌ ${err.message || "No se pudo añadir el requisito."}`);
+                new Notice(`❌ ${err.message || "No se pudo añadir el requisito."}`);
             }
         };
 
@@ -959,7 +965,7 @@ window.KanbanUI = {
                 limpiarDestino();
                 overlayDestino = candidato;
                 overlayDestino.classList.add("kanban-mermaid-drop-over");
-                window.KanbanUI._nodoSvgDesdeOverlay(svg, overlayDestino)
+                KanbanUI._nodoSvgDesdeOverlay(svg, overlayDestino)
                     ?.classList.add("kanban-mermaid-drop-over");
             }
         };
@@ -1002,14 +1008,14 @@ window.KanbanUI = {
             const { overlay, tareaId, arrastrando, fantasma } = activo;
             overlay.classList.remove("kanban-mermaid-arrastrando");
             overlay.style.pointerEvents = "";
-            window.KanbanUI._nodoSvgDesdeOverlay(svg, overlay)
+            KanbanUI._nodoSvgDesdeOverlay(svg, overlay)
                 ?.classList.remove("kanban-mermaid-arrastrando");
             if (fantasma) fantasma.remove();
 
             if (arrastrando) {
                 // Priorizar el chip que estaba resaltado durante el arrastre
                 const destino = overlayDestino
-                    || window.KanbanUI._overlayEnPunto(capa, clientX, clientY, overlay);
+                    || KanbanUI._overlayEnPunto(capa, clientX, clientY, overlay);
                 if (destino) {
                     const destinoId = parseInt(destino.dataset.tareaId, 10);
                     await aplicarRequisito(tareaId, destinoId);
@@ -1034,7 +1040,7 @@ window.KanbanUI = {
                 activo.arrastrando = true;
                 activo.overlay.classList.add("kanban-mermaid-arrastrando");
                 activo.overlay.style.pointerEvents = "none";
-                window.KanbanUI._nodoSvgDesdeOverlay(svg, activo.overlay)
+                KanbanUI._nodoSvgDesdeOverlay(svg, activo.overlay)
                     ?.classList.add("kanban-mermaid-arrastrando");
                 activo.fantasma = crearFantasma(activo.texto);
                 document.body.style.userSelect = "none";
@@ -1046,7 +1052,7 @@ window.KanbanUI = {
             }
 
             resaltarDestino(
-                window.KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY, activo.overlay),
+                KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY, activo.overlay),
                 activo.tareaId
             );
         };
@@ -1086,17 +1092,17 @@ window.KanbanUI = {
             const overlay = e.target.closest?.(".kanban-mermaid-overlay");
             if (!overlay) return;
             const tareaId = parseInt(overlay.dataset.tareaId, 10);
-            if (tareaId) window.KanbanUI._abrirEdicionTarea(db, dbPath, tareaId);
+            if (tareaId) KanbanUI._abrirEdicionTarea(db, dbPath, tareaId);
         });
 
         hostEl.addEventListener("dragover", (e) => {
-            const origenId = window.KanbanUI._extraerTareaIdDesdeDataTransfer(e.dataTransfer);
+            const origenId = KanbanUI._extraerTareaIdDesdeDataTransfer(e.dataTransfer);
             if (!origenId) return;
 
             e.preventDefault();
             e.dataTransfer.dropEffect = "link";
             resaltarDestino(
-                window.KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY),
+                KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY),
                 origenId
             );
         }, true);
@@ -1109,9 +1115,9 @@ window.KanbanUI = {
             e.preventDefault();
             e.stopPropagation();
 
-            const origenId = window.KanbanUI._extraerTareaIdDesdeDataTransfer(e.dataTransfer);
+            const origenId = KanbanUI._extraerTareaIdDesdeDataTransfer(e.dataTransfer);
             const destino = overlayDestino
-                || window.KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY);
+                || KanbanUI._overlayEnPunto(capa, e.clientX, e.clientY);
             limpiarDestino();
 
             if (!origenId || !destino) return;
@@ -1130,22 +1136,22 @@ window.KanbanUI = {
 
         const clases = [];
         const emitirNodo = (t, indent = "  ") => {
-            const label = window.KanbanUI._sanitizarMermaid(t.texto);
+            const label = KanbanUI._sanitizarMermaid(t.texto);
             // Forma stadium (pastilla) para aspecto de chip
             codigo += `${indent}T${t.id}(["${label}"])\n`;
         };
         const emitirClases = (t) => {
-            if (window.KanbanUI._esBloqueada(t, mapa)) clases.push(`class T${t.id} bloqueada`);
+            if (KanbanUI._esBloqueada(t, mapa)) clases.push(`class T${t.id} bloqueada`);
             else if (t.estado === "Terminado") clases.push(`class T${t.id} terminado`);
             else if (t.estado === "En Proceso") clases.push(`class T${t.id} enProceso`);
             else clases.push(`class T${t.id} porHacer`);
         };
 
         if (agruparPorProyecto) {
-            window.KanbanUI._agruparPorProyecto(tareas).forEach((grupo, idx) => {
+            KanbanUI._agruparPorProyecto(tareas).forEach((grupo, idx) => {
                 const sgId = `SG${idx}`;
-                const titulo = window.KanbanUI._sanitizarMermaid(grupo.nombre);
-                const color = window.KanbanUI._colorProyecto(idx);
+                const titulo = KanbanUI._sanitizarMermaid(grupo.nombre);
+                const color = KanbanUI._colorProyecto(idx);
                 codigo += `  subgraph ${sgId}["📁 ${titulo}"]\n`;
                 codigo += "    direction LR\n";
                 grupo.tareas.forEach(t => emitirNodo(t, "    "));
@@ -1161,7 +1167,7 @@ window.KanbanUI = {
         }
 
         tareas.forEach(t => {
-            window.KanbanUI._requisitosVisibles(t, mapa).forEach(reqId => {
+            KanbanUI._requisitosVisibles(t, mapa).forEach(reqId => {
                 if (mapa.has(reqId)) codigo += `  T${reqId} --> T${t.id}\n`;
             });
         });
@@ -1174,7 +1180,7 @@ window.KanbanUI = {
         if (tituloProyecto != null) {
             const bloque = document.createElement("div");
             bloque.className = "kanban-mapa-proyecto";
-            const color = window.KanbanUI._colorProyecto(indiceColor);
+            const color = KanbanUI._colorProyecto(indiceColor);
             bloque.style.background = color.kanban;
             bloque.style.borderColor = color.border;
 
@@ -1188,20 +1194,20 @@ window.KanbanUI = {
             bloque.appendChild(svgHost);
             contenedor.appendChild(bloque);
 
-            const codigo = window.KanbanUI._construirMermaid(tareas, false);
-            await window.KanbanUI._renderMermaidSvg(svgHost, codigo);
-            window.KanbanUI._pulirEstiloNodosMermaid(svgHost);
-            window.KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
+            const codigo = KanbanUI._construirMermaid(tareas, false);
+            await KanbanUI._renderMermaidSvg(svgHost, codigo);
+            KanbanUI._pulirEstiloNodosMermaid(svgHost);
+            KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
             return;
         }
 
-        const codigo = window.KanbanUI._construirMermaid(tareas, agruparPorProyecto);
+        const codigo = KanbanUI._construirMermaid(tareas, agruparPorProyecto);
         const svgHost = document.createElement("div");
         svgHost.className = "kanban-mermaid-svg";
         contenedor.appendChild(svgHost);
-        await window.KanbanUI._renderMermaidSvg(svgHost, codigo);
-        window.KanbanUI._pulirEstiloNodosMermaid(svgHost);
-        window.KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
+        await KanbanUI._renderMermaidSvg(svgHost, codigo);
+        KanbanUI._pulirEstiloNodosMermaid(svgHost);
+        KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
     },
 
     _renderMapa: async (contenedor, tareas, proyectoFiltro, db, dbPath) => {
@@ -1228,14 +1234,14 @@ window.KanbanUI = {
             vacio.textContent = "Añade tareas para visualizar el árbol tecnológico.";
             mermaidHost.appendChild(vacio);
         } else if (!proyectoFiltro) {
-            const grupos = window.KanbanUI._agruparPorProyecto(tareas);
+            const grupos = KanbanUI._agruparPorProyecto(tareas);
             for (let i = 0; i < grupos.length; i++) {
-                await window.KanbanUI._renderBloqueMermaid(
+                await KanbanUI._renderBloqueMermaid(
                     mermaidHost, grupos[i].tareas, db, dbPath, grupos[i].nombre, i, false
                 );
             }
         } else {
-            await window.KanbanUI._renderBloqueMermaid(
+            await KanbanUI._renderBloqueMermaid(
                 mermaidHost, tareas, db, dbPath, null, 0, false
             );
         }
@@ -1245,14 +1251,14 @@ window.KanbanUI = {
     },
 
     _crearTarjeta: (tarea, mapaTareas, db, dbPath, ocultarProyecto = false) => {
-        const bloqueada = window.KanbanUI._esBloqueada(tarea, mapaTareas);
+        const bloqueada = KanbanUI._esBloqueada(tarea, mapaTareas);
         const card = document.createElement("div");
         card.className = "kanban-tarjeta" + (bloqueada ? " kanban-tarjeta-bloqueada" : "");
         card.draggable = true;
         card.dataset.tareaId = String(tarea.id);
 
         card.addEventListener("dragstart", (e) => {
-            window.KanbanUI._marcarDatosDragTarea(e.dataTransfer, tarea.id);
+            KanbanUI._marcarDatosDragTarea(e.dataTransfer, tarea.id);
         });
 
         const texto = document.createElement("div");
@@ -1267,7 +1273,7 @@ window.KanbanUI = {
         btnEdit.title = "Editar tarea";
         btnEdit.addEventListener("click", (e) => {
             e.stopPropagation();
-            window.KanbanUI._abrirEdicionTarea(db, dbPath, tarea.id);
+            KanbanUI._abrirEdicionTarea(db, dbPath, tarea.id);
         });
         acciones.appendChild(btnEdit);
 
@@ -1282,7 +1288,7 @@ window.KanbanUI = {
         let metaTxt = ocultarProyecto ? "" : `📁 ${tarea.proyecto}`;
         if (bloqueada) metaTxt += (metaTxt ? " · " : "") + "🔒 Bloqueada";
         else {
-            const reqsVisibles = window.KanbanUI._requisitosVisibles(tarea, mapaTareas);
+            const reqsVisibles = KanbanUI._requisitosVisibles(tarea, mapaTareas);
             if (reqsVisibles.length) {
                 metaTxt += (metaTxt ? " · " : "") +
                     `Requiere ${reqsVisibles.map(id => `#${id}`).join(", ")}`;
@@ -1348,11 +1354,11 @@ window.KanbanUI = {
             if (!tareaId) return;
 
             try {
-                await window.KanbanDB.actualizarEstado(db, dbPath, tareaId, estadoDestino);
+                await KanbanDB.actualizarEstado(db, dbPath, tareaId, estadoDestino);
                 window.ejecutarRenderKanban();
             } catch (err) {
                 console.error("Error en drop:", err);
-                new window.Notice("❌ No se pudo mover la tarea.");
+                new Notice("❌ No se pudo mover la tarea.");
             }
         });
     },
@@ -1377,7 +1383,7 @@ window.KanbanUI = {
         if (!proyectoFiltro) optTodos.selected = true;
         selectProyecto.appendChild(optTodos);
 
-        window.KanbanDB.obtenerProyectos(db).forEach(p => {
+        KanbanDB.obtenerProyectos(db).forEach(p => {
             const opt = document.createElement("option");
             opt.value = p.nombre;
             opt.textContent = `${p.nombre} (${p.total})`;
@@ -1399,7 +1405,7 @@ window.KanbanUI = {
         btnGestion.className = "kanban-btn-gestion-proyectos";
         btnGestion.textContent = "📦 Proyectos";
         btnGestion.addEventListener("click", () => {
-            new window.KanbanModals.ProyectosGestionModal(
+            new KanbanModals.ProyectosGestionModal(
                 app, db, dbPath, proyectoFiltro, setProyectoFiltro,
                 () => window.ejecutarRenderKanban()
             ).open();
@@ -1410,7 +1416,7 @@ window.KanbanUI = {
         btnNueva.className = "kanban-btn-nueva";
         btnNueva.textContent = "🧪 Añadir Nueva Tarea";
         btnNueva.addEventListener("click", () => {
-            new window.KanbanModals.TareaFormModal(
+            new KanbanModals.TareaFormModal(
                 app, db, dbPath, null, () => window.ejecutarRenderKanban(), proyectoFiltro
             ).open();
         });
@@ -1423,10 +1429,10 @@ window.KanbanUI = {
 
     _renderKanban: (contenedor, tareas, db, dbPath, proyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas, numCompletadas) => {
         const mapa = new Map(tareas.map(t => [t.id, t]));
-        const bloqueadas = tareas.filter(t => window.KanbanUI._esBloqueada(t, mapa));
+        const bloqueadas = tareas.filter(t => KanbanUI._esBloqueada(t, mapa));
         const tareasVisibles = mostrarBloqueadas
             ? tareas
-            : tareas.filter(t => !window.KanbanUI._esBloqueada(t, mapa));
+            : tareas.filter(t => !KanbanUI._esBloqueada(t, mapa));
 
         const seccion = document.createElement("div");
         seccion.className = "kanban-seccion-tablero";
@@ -1501,7 +1507,7 @@ window.KanbanUI = {
 
         const indiceProyecto = new Map();
         if (!proyectoFiltro) {
-            window.KanbanUI._agruparPorProyecto(tareas).forEach((g, i) => indiceProyecto.set(g.nombre, i));
+            KanbanUI._agruparPorProyecto(tareas).forEach((g, i) => indiceProyecto.set(g.nombre, i));
         }
 
         const clasesColumna = {
@@ -1510,7 +1516,7 @@ window.KanbanUI = {
             "Terminado": "kanban-columna-terminado"
         };
 
-        window.KanbanUI.ESTADOS.forEach(estado => {
+        KanbanUI.ESTADOS.forEach(estado => {
             const col = document.createElement("div");
             col.className = `kanban-columna ${clasesColumna[estado]}`;
 
@@ -1530,9 +1536,9 @@ window.KanbanUI = {
                 vacio.textContent = "Sin tareas";
                 body.appendChild(vacio);
             } else if (!proyectoFiltro) {
-                const grupos = window.KanbanUI._agruparPorProyecto(tareasCol);
+                const grupos = KanbanUI._agruparPorProyecto(tareasCol);
                 grupos.forEach((grupo) => {
-                    const color = window.KanbanUI._colorProyecto(indiceProyecto.get(grupo.nombre) ?? 0);
+                    const color = KanbanUI._colorProyecto(indiceProyecto.get(grupo.nombre) ?? 0);
                     const grupoEl = document.createElement("div");
                     grupoEl.className = "kanban-grupo-proyecto";
                     grupoEl.style.background = color.kanban;
@@ -1545,18 +1551,18 @@ window.KanbanUI = {
 
                     grupo.tareas.forEach(t => {
                         grupoEl.appendChild(
-                            window.KanbanUI._crearTarjeta(t, mapa, db, dbPath, true)
+                            KanbanUI._crearTarjeta(t, mapa, db, dbPath, true)
                         );
                     });
                     body.appendChild(grupoEl);
                 });
             } else {
                 tareasCol.forEach(t => {
-                    body.appendChild(window.KanbanUI._crearTarjeta(t, mapa, db, dbPath));
+                    body.appendChild(KanbanUI._crearTarjeta(t, mapa, db, dbPath));
                 });
             }
 
-            window.KanbanUI._configurarColumnaDrop(body, estado, db, dbPath);
+            KanbanUI._configurarColumnaDrop(body, estado, db, dbPath);
             col.appendChild(body);
             columnas.appendChild(col);
         });
@@ -1576,8 +1582,8 @@ window.KanbanUI = {
 
         let tareasTodas = [];
         try {
-            tareasTodas = window.KanbanDB.obtenerTodas(db);
-            const archivados = new Set(window.KanbanDB.obtenerNombresProyectosArchivados(db));
+            tareasTodas = KanbanDB.obtenerTodas(db);
+            const archivados = new Set(KanbanDB.obtenerNombresProyectosArchivados(db));
             tareasTodas = tareasTodas.filter(t => !archivados.has(t.proyecto));
         } catch (err) {
             const errEl = document.createElement("p");
@@ -1596,9 +1602,9 @@ window.KanbanUI = {
             ? tareasBase
             : tareasBase.filter(t => t.estado !== "Terminado");
 
-        window.KanbanUI._renderPanelSuperior(layout, db, dbPath, proyectoFiltro, setProyectoFiltro);
-        await window.KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath);
-        window.KanbanUI._renderKanban(
+        KanbanUI._renderPanelSuperior(layout, db, dbPath, proyectoFiltro, setProyectoFiltro);
+        await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath);
+        KanbanUI._renderKanban(
             layout, tareas, db, dbPath, proyectoFiltro,
             mostrarBloqueadas, setMostrarBloqueadas,
             mostrarCompletadas, setMostrarCompletadas, numCompletadas

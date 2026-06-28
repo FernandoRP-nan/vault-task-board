@@ -1,6 +1,10 @@
+/* kanban_db.ts — migrado a módulo TS */
+// @ts-nocheck
+import { ScriptsRuntime } from "../runtime/scripts-runtime";
+
 /* kanban_db.js - Persistencia SQLite para tareas con dependencias */
 
-window.KanbanDB = {
+export const KanbanDB = {
     SCHEMA_TAREAS: `CREATE TABLE IF NOT EXISTS tareas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         texto TEXT NOT NULL,
@@ -37,28 +41,28 @@ window.KanbanDB = {
     DB_RELATIVE: ".obsidian/plugins-data/vault-task-board/kanban_tareas.db",
 
     // Apertura síncrona desde disco (misma lógica que init; Agenda y Organizador comparten archivo)
-    abrirSync: (SQL, dbPath) => window.ScriptsRuntime.abrirDb(SQL, dbPath, (db, esNueva) => {
-        db.run(window.KanbanDB.SCHEMA_TAREAS);
-        db.run(window.KanbanDB.SCHEMA_REQUISITOS);
-        db.run(window.KanbanDB.SCHEMA_PROYECTOS);
-        db.run(window.KanbanDB.SCHEMA_SUBTAREAS);
-        window.KanbanDB._migrarEsquema(db, esNueva ? null : dbPath);
-        window.KanbanDB._sincronizarProyectosDesdeTareas(db);
+    abrirSync: (SQL, dbPath) => ScriptsRuntime.abrirDb(SQL, dbPath, (db, esNueva) => {
+        db.run(KanbanDB.SCHEMA_TAREAS);
+        db.run(KanbanDB.SCHEMA_REQUISITOS);
+        db.run(KanbanDB.SCHEMA_PROYECTOS);
+        db.run(KanbanDB.SCHEMA_SUBTAREAS);
+        KanbanDB._migrarEsquema(db, esNueva ? null : dbPath);
+        KanbanDB._sincronizarProyectosDesdeTareas(db);
         db.run(`INSERT OR IGNORE INTO tarea_requisitos (tarea_id, requisito_id)
             SELECT id, requisito_id FROM tareas WHERE requisito_id IS NOT NULL`);
     }),
 
     init: async (SQL, dbPath) => {
-        if (!window.ScriptsRuntime.puedeUsarFs()) {
-            await window.ScriptsRuntime.leerBinarioAsync(dbPath);
+        if (!ScriptsRuntime.puedeUsarFs()) {
+            await ScriptsRuntime.leerBinarioAsync(dbPath);
         }
-        return window.KanbanDB.abrirSync(SQL, dbPath);
+        return KanbanDB.abrirSync(SQL, dbPath);
     },
 
     _marcaAgenda: (agendaId) => `<!-- agenda:${agendaId} -->`,
 
     _notaConMarcaAgenda: (notas, agendaId) => {
-        const marca = window.KanbanDB._marcaAgenda(agendaId);
+        const marca = KanbanDB._marcaAgenda(agendaId);
         const limpia = String(notas || "").replace(/\n?<!-- agenda:[^>]+ -->/g, "").trim();
         return limpia ? `${limpia}\n${marca}` : marca;
     },
@@ -83,7 +87,7 @@ window.KanbanDB = {
             db.run("ALTER TABLE tareas ADD COLUMN imagenes TEXT DEFAULT '[]'");
             cambio = true;
         }
-        if (cambio && dbPath) window.KanbanDB.guardar(db, dbPath);
+        if (cambio && dbPath) KanbanDB.guardar(db, dbPath);
     },
 
     _parseImagenes: (valor) => {
@@ -125,7 +129,7 @@ window.KanbanDB = {
         stmt.free();
     },
 
-    guardar: (db, dbPath) => window.ScriptsRuntime.guardarDb(db, dbPath),
+    guardar: (db, dbPath) => ScriptsRuntime.guardarDb(db, dbPath),
 
     _obtenerMapaRequisitos: (db) => {
         const mapa = new Map();
@@ -150,8 +154,8 @@ window.KanbanDB = {
     },
 
     obtenerTodas: (db) => {
-        const requisitosMap = window.KanbanDB._obtenerMapaRequisitos(db);
-        const subtareasMap = window.KanbanDB._obtenerMapaSubtareas(db);
+        const requisitosMap = KanbanDB._obtenerMapaRequisitos(db);
+        const subtareasMap = KanbanDB._obtenerMapaSubtareas(db);
         const stmt = db.prepare(
             "SELECT id, texto, proyecto, estado, requisito_id, nota, imagenes FROM tareas ORDER BY id ASC"
         );
@@ -167,7 +171,7 @@ window.KanbanDB = {
                 estado: r[3],
                 requisito_ids: ids,
                 nota: r[5] || "",
-                imagenes: window.KanbanDB._parseImagenes(r[6]),
+                imagenes: KanbanDB._parseImagenes(r[6]),
                 subtareas: subtareasMap.get(r[0]) || []
             });
         }
@@ -189,11 +193,11 @@ window.KanbanDB = {
     },
 
     _asegurarProyectoActivo: (db, nombre) => {
-        window.KanbanDB._registrarProyecto(db, nombre, 0);
+        KanbanDB._registrarProyecto(db, nombre, 0);
     },
 
     obtenerNombresProyectosArchivados: (db) => {
-        window.KanbanDB._sincronizarProyectosDesdeTareas(db);
+        KanbanDB._sincronizarProyectosDesdeTareas(db);
         const stmt = db.prepare("SELECT nombre FROM proyectos WHERE archivado = 1");
         const nombres = [];
         while (stmt.step()) nombres.push(stmt.get()[0]);
@@ -202,7 +206,7 @@ window.KanbanDB = {
     },
 
     crearTarea: (db, dbPath, datos) => {
-        window.KanbanDB._asegurarProyectoActivo(db, datos.proyecto);
+        KanbanDB._asegurarProyectoActivo(db, datos.proyecto);
         const stmt = db.prepare(
             "INSERT INTO tareas (texto, proyecto, estado, nota, imagenes) VALUES (:texto, :proyecto, :estado, :nota, :imagenes)"
         );
@@ -211,18 +215,18 @@ window.KanbanDB = {
             ":proyecto": datos.proyecto,
             ":estado": datos.estado,
             ":nota": datos.nota || "",
-            ":imagenes": window.KanbanDB._serializarImagenes(datos.imagenes)
+            ":imagenes": KanbanDB._serializarImagenes(datos.imagenes)
         });
         stmt.free();
         const newId = db.exec("SELECT last_insert_rowid()")[0].values[0][0];
-        window.KanbanDB.guardarRequisitos(db, newId, datos.requisito_ids);
-        window.KanbanDB.guardarSubtareas(db, newId, datos.subtareas);
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB.guardarRequisitos(db, newId, datos.requisito_ids);
+        KanbanDB.guardarSubtareas(db, newId, datos.subtareas);
+        KanbanDB.guardar(db, dbPath);
         return newId;
     },
 
     actualizarTarea: (db, dbPath, tareaId, datos) => {
-        window.KanbanDB._asegurarProyectoActivo(db, datos.proyecto);
+        KanbanDB._asegurarProyectoActivo(db, datos.proyecto);
         const stmt = db.prepare(
             "UPDATE tareas SET texto = :texto, proyecto = :proyecto, estado = :estado, nota = :nota, imagenes = :imagenes WHERE id = :id"
         );
@@ -231,31 +235,31 @@ window.KanbanDB = {
             ":proyecto": datos.proyecto,
             ":estado": datos.estado,
             ":nota": datos.nota || "",
-            ":imagenes": window.KanbanDB._serializarImagenes(datos.imagenes),
+            ":imagenes": KanbanDB._serializarImagenes(datos.imagenes),
             ":id": tareaId
         });
         stmt.free();
-        window.KanbanDB.guardarRequisitos(db, tareaId, datos.requisito_ids);
-        window.KanbanDB.guardarSubtareas(db, tareaId, datos.subtareas);
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB.guardarRequisitos(db, tareaId, datos.requisito_ids);
+        KanbanDB.guardarSubtareas(db, tareaId, datos.subtareas);
+        KanbanDB.guardar(db, dbPath);
     },
 
     actualizarEstado: async (db, dbPath, tareaId, nuevoEstado) => {
         const stmt = db.prepare("UPDATE tareas SET estado = :estado WHERE id = :id");
         stmt.run({ ":estado": nuevoEstado, ":id": tareaId });
         stmt.free();
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB.guardar(db, dbPath);
     },
 
     eliminarTarea: (db, dbPath, tareaId) => {
         const stmt = db.prepare("DELETE FROM tareas WHERE id = :id");
         stmt.run({ ":id": tareaId });
         stmt.free();
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB.guardar(db, dbPath);
     },
 
     obtenerDependientesDe: (db, tareaId) => {
-        const todas = window.KanbanDB.obtenerTodas(db);
+        const todas = KanbanDB.obtenerTodas(db);
         return todas.filter(t =>
             t.id !== tareaId && (t.requisito_ids || []).includes(tareaId)
         );
@@ -263,8 +267,8 @@ window.KanbanDB = {
 
     // Omite requisitos que ya están implícitos vía otro (padres/abuelos en la cadena)
     filtrarRequisitosDirectos: (db, requisitoIds) => {
-        const mapa = new Map(window.KanbanDB.obtenerTodas(db).map(t => [t.id, t]));
-        return window.KanbanDB._filtrarRequisitosSinAncestros(requisitoIds, mapa);
+        const mapa = new Map(KanbanDB.obtenerTodas(db).map(t => [t.id, t]));
+        return KanbanDB._filtrarRequisitosSinAncestros(requisitoIds, mapa);
     },
 
     _filtrarRequisitosSinAncestros: (requisitoIds, mapaTareas) => {
@@ -321,16 +325,16 @@ window.KanbanDB = {
 
     // IDs que no deben ofrecerse al elegir requisitos (ciclos y jerarquía redundante)
     obtenerIdsExcluidosParaSugerenciaRequisitos: (db, tareaActualId, idsSeleccionados = []) => {
-        const mapa = new Map(window.KanbanDB.obtenerTodas(db).map(t => [t.id, t]));
+        const mapa = new Map(KanbanDB.obtenerTodas(db).map(t => [t.id, t]));
         const excluir = new Set([tareaActualId, ...idsSeleccionados].filter(Boolean));
 
         idsSeleccionados.forEach(id => {
-            window.KanbanDB._agregarAncestrosRequisitos(id, mapa, excluir);
-            window.KanbanDB._agregarDescendientesRequisitos(id, mapa, excluir);
+            KanbanDB._agregarAncestrosRequisitos(id, mapa, excluir);
+            KanbanDB._agregarDescendientesRequisitos(id, mapa, excluir);
         });
 
         if (tareaActualId) {
-            window.KanbanDB._agregarDescendientesRequisitos(tareaActualId, mapa, excluir);
+            KanbanDB._agregarDescendientesRequisitos(tareaActualId, mapa, excluir);
         }
 
         return [...excluir];
@@ -338,7 +342,7 @@ window.KanbanDB = {
 
     // Añade un requisito visual (drag & drop en el diagrama)
     agregarRequisito: (db, dbPath, tareaDestinoId, requisitoId) => {
-        const todas = window.KanbanDB.obtenerTodas(db);
+        const todas = KanbanDB.obtenerTodas(db);
         const mapa = new Map(todas.map(t => [t.id, t]));
         const destino = mapa.get(tareaDestinoId);
         const requisito = mapa.get(requisitoId);
@@ -352,7 +356,7 @@ window.KanbanDB = {
         const idsActuales = [...(destino.requisito_ids || [])];
         if (idsActuales.includes(requisitoId)) return { agregado: false, motivo: "ya_existe" };
 
-        const idsExcluidos = window.KanbanDB.obtenerIdsExcluidosParaSugerenciaRequisitos(
+        const idsExcluidos = KanbanDB.obtenerIdsExcluidosParaSugerenciaRequisitos(
             db, tareaDestinoId, idsActuales
         );
         if (idsExcluidos.includes(requisitoId)) {
@@ -360,9 +364,9 @@ window.KanbanDB = {
         }
 
         idsActuales.push(requisitoId);
-        const compactados = window.KanbanDB._filtrarRequisitosSinAncestros(idsActuales, mapa);
+        const compactados = KanbanDB._filtrarRequisitosSinAncestros(idsActuales, mapa);
 
-        window.KanbanDB.actualizarTarea(db, dbPath, tareaDestinoId, {
+        KanbanDB.actualizarTarea(db, dbPath, tareaDestinoId, {
             texto: destino.texto,
             proyecto: destino.proyecto,
             estado: destino.estado,
@@ -375,7 +379,7 @@ window.KanbanDB = {
     },
 
     obtenerProyectos: (db, { soloActivos = true } = {}) => {
-        window.KanbanDB._sincronizarProyectosDesdeTareas(db);
+        KanbanDB._sincronizarProyectosDesdeTareas(db);
         const sql = soloActivos
             ? `SELECT p.nombre, COUNT(t.id) AS total, p.archivado
                FROM proyectos p
@@ -399,14 +403,14 @@ window.KanbanDB = {
     },
 
     archivarProyecto: (db, dbPath, nombre) => {
-        window.KanbanDB._sincronizarProyectosDesdeTareas(db);
-        window.KanbanDB._registrarProyecto(db, nombre, 1);
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB._sincronizarProyectosDesdeTareas(db);
+        KanbanDB._registrarProyecto(db, nombre, 1);
+        KanbanDB.guardar(db, dbPath);
     },
 
     restaurarProyecto: (db, dbPath, nombre) => {
-        window.KanbanDB._sincronizarProyectosDesdeTareas(db);
-        window.KanbanDB._registrarProyecto(db, nombre, 0);
-        window.KanbanDB.guardar(db, dbPath);
+        KanbanDB._sincronizarProyectosDesdeTareas(db);
+        KanbanDB._registrarProyecto(db, nombre, 0);
+        KanbanDB.guardar(db, dbPath);
     }
 };
