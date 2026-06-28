@@ -34,7 +34,7 @@ window.KanbanDB = {
     );`,
 
     KANBAN_IMAGEN_CARPETA: "Adjuntos/Organizador",
-    DB_RELATIVE: ".obsidian/scripts/kanban_tareas.db",
+    DB_RELATIVE: ".obsidian/plugins-data/vault-task-board/kanban_tareas.db",
 
     // Apertura síncrona desde disco (misma lógica que init; Agenda y Organizador comparten archivo)
     abrirSync: (SQL, dbPath) => window.ScriptsRuntime.abrirDb(SQL, dbPath, (db, esNueva) => {

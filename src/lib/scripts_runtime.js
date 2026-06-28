@@ -1,17 +1,18 @@
 /* scripts_runtime.js - I/O del vault compatible con Obsidian móvil y escritorio */
 
 window.ScriptsRuntime = {
-    SQL_JS_REL: ".obsidian/scripts/node_modules/sql.js/dist/sql-wasm.js",
-    SQL_WASM_REL: ".obsidian/scripts/node_modules/sql.js/dist/sql-wasm.wasm",
+    SQL_JS_REL: "",
+    SQL_WASM_REL: "",
 
     _app: null,
     _binCache: new Map(),
 
-    configure: (app) => {
+    configure: (app, opts = {}) => {
         window.ScriptsRuntime._app = app;
+        if (opts.sqlJsRel) window.ScriptsRuntime.SQL_JS_REL = opts.sqlJsRel;
+        if (opts.sqlWasmRel) window.ScriptsRuntime.SQL_WASM_REL = opts.sqlWasmRel;
     },
 
-    // Escritorio: fs + basePath. Móvil: adapter del vault.
     puedeUsarFs: () => {
         try {
             const base = window.ScriptsRuntime._app?.vault?.adapter?.basePath;
@@ -96,6 +97,18 @@ window.ScriptsRuntime = {
         window.ScriptsRuntime._binCache.set(relPath, bytes);
     },
 
+    // Copia DB legada → ruta del plugin (solo si el destino no existe)
+    migrarArchivoBinario: async (legacyRel, newRel) => {
+        if (!legacyRel || !newRel || legacyRel === newRel) return false;
+        if (await window.ScriptsRuntime.existeAsync(newRel)) return false;
+        if (!(await window.ScriptsRuntime.existeAsync(legacyRel))) return false;
+        const bytes = await window.ScriptsRuntime.leerBinarioAsync(legacyRel);
+        if (!bytes?.length) return false;
+        await window.ScriptsRuntime.escribirBinarioAsync(newRel, bytes);
+        window.ScriptsRuntime._binCache.delete(legacyRel);
+        return true;
+    },
+
     guardarDb: (db, relPath) => {
         const bytes = db.export();
         const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -137,6 +150,10 @@ window.ScriptsRuntime = {
 
         const jsRel = window.ScriptsRuntime.SQL_JS_REL;
         const wasmRel = window.ScriptsRuntime.SQL_WASM_REL;
+        if (!jsRel || !wasmRel) {
+            throw new Error("ScriptsRuntime: faltan rutas sql.js (configure con sqlJsRel/sqlWasmRel).");
+        }
+
         let wasmBinary;
         let initFn;
 
@@ -145,7 +162,7 @@ window.ScriptsRuntime = {
             const absWasm = window.ScriptsRuntime.rutaAbsoluta(wasmRel);
             const absJs = window.ScriptsRuntime.rutaAbsoluta(jsRel);
             if (!fs.existsSync(absWasm) || !fs.existsSync(absJs)) {
-                throw new Error(`Faltan sql.js en ${wasmRel}`);
+                throw new Error(`Faltan sql.js en el plugin (${wasmRel}). Ejecuta npm run build.`);
             }
             wasmBinary = new Uint8Array(fs.readFileSync(absWasm));
             initFn = require(absJs);

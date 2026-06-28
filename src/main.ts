@@ -1,13 +1,18 @@
 import { ItemView, Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import "./legacy";
 
+const PLUGIN_ID = "vault-task-board";
+const PLUGIN_ROOT = `.obsidian/plugins/${PLUGIN_ID}`;
+const LEGACY_DB = ".obsidian/scripts/kanban_tareas.db";
+
 declare global {
     interface Window {
         ScriptsRuntime: {
-            configure: (app: unknown) => void;
+            configure: (app: unknown, opts?: { sqlJsRel?: string; sqlWasmRel?: string }) => void;
             initSqlJs: () => Promise<unknown>;
             puedeUsarFs: () => boolean;
             leerBinarioAsync: (path: string) => Promise<Uint8Array | null>;
+            migrarArchivoBinario: (legacy: string, dest: string) => Promise<boolean>;
         };
         KanbanDB: {
             DB_RELATIVE: string;
@@ -50,13 +55,23 @@ export const VIEW_TYPE = "vault-task-board-dashboard";
 export default class TaskBoardPlugin extends Plugin {
     api!: TaskBoardApi;
     private sql: unknown = null;
+    private ready = false;
 
     async onload(): Promise<void> {
-        window.ScriptsRuntime.configure(this.app);
+        window.ScriptsRuntime.configure(this.app, {
+            sqlJsRel: `${PLUGIN_ROOT}/assets/sql-wasm.js`,
+            sqlWasmRel: `${PLUGIN_ROOT}/assets/sql-wasm.wasm`
+        });
+
+        const dbPath = window.KanbanDB.DB_RELATIVE;
+        if (await window.ScriptsRuntime.migrarArchivoBinario(LEGACY_DB, dbPath)) {
+            new Notice("Task Board: base de datos migrada a plugins-data.");
+        }
+
         this.api = window.TaskBoardBridgeFactory(() => this.sql);
         window.TaskBoardBridge = this.api;
 
-        this.registerView(VIEW_TYPE, (leaf) => new TaskBoardView(leaf, () => this.sql, this));
+        this.registerView(VIEW_TYPE, (leaf) => new TaskBoardView(leaf, this));
         this.addRibbonIcon("layout-dashboard", "Task Board", () => this.activateView());
         this.addCommand({
             id: "open-dashboard",
@@ -76,7 +91,10 @@ export default class TaskBoardPlugin extends Plugin {
     }
 
     async ensureSql(): Promise<unknown> {
-        if (!this.sql) this.sql = await window.ScriptsRuntime.initSqlJs();
+        if (!this.sql) {
+            this.sql = await window.ScriptsRuntime.initSqlJs();
+            this.ready = true;
+        }
         return this.sql;
     }
 
@@ -96,11 +114,7 @@ class TaskBoardView extends ItemView {
     private mostrarBloqueadas = true;
     private mostrarCompletadas = true;
 
-    constructor(
-        leaf: WorkspaceLeaf,
-        private getSql: () => unknown,
-        private plugin: TaskBoardPlugin
-    ) {
+    constructor(leaf: WorkspaceLeaf, private plugin: TaskBoardPlugin) {
         super(leaf);
     }
 
@@ -135,18 +149,18 @@ class TaskBoardView extends ItemView {
 
         try {
             const SQL = await this.plugin.ensureSql();
-            this.getSql(); // sincroniza referencia interna
+            const dbPath = window.KanbanDB.DB_RELATIVE;
             if (!window.ScriptsRuntime.puedeUsarFs()) {
-                await window.ScriptsRuntime.leerBinarioAsync(window.KanbanDB.DB_RELATIVE);
+                await window.ScriptsRuntime.leerBinarioAsync(dbPath);
             }
-            let db = await window.KanbanDB.init(SQL, window.KanbanDB.DB_RELATIVE);
+            let db = await window.KanbanDB.init(SQL, dbPath);
             window.KanbanUI.injectStyles();
 
             const ejecutar = async () => {
-                db = await window.KanbanDB.init(SQL, window.KanbanDB.DB_RELATIVE);
+                db = await window.KanbanDB.init(SQL, dbPath);
                 root.empty();
                 await window.KanbanUI.renderDashboard(
-                    root, db, window.KanbanDB.DB_RELATIVE,
+                    root, db, dbPath,
                     this.proyectoFiltro,
                     (p) => { this.proyectoFiltro = p; void ejecutar(); },
                     this.mostrarBloqueadas,

@@ -4,65 +4,47 @@ Plugin local de Obsidian: tablero Kanban con proyectos, dependencias visuales y 
 
 ## Instalación local
 
-> **Importante:** desarrolla **fuera del vault**. Si el repo con `node_modules` queda dentro de la bóveda, Obsidian puede colgarse al indexar.
-
-### 1. Clonar (fuera del vault)
+> **Importante:** clona **fuera del vault** (evita indexar `node_modules`).
 
 ```bash
 git clone https://github.com/FernandoRP-nan/vault-task-board.git
-# Ejemplo: /mnt/datos/.../Obsidian-Plugins/vault-task-board
-```
-
-### 2. sql.js (una vez por vault)
-
-```bash
-cd /ruta/a/tu/vault/.obsidian/scripts
-npm init -y
-npm install sql.js
-```
-
-### 3. Compilar
-
-```bash
-cd /ruta/a/Obsidian-Plugins/vault-task-board
+cd vault-task-board
 npm install
-npm run build
+npm run build   # genera main.js + assets/sql-wasm.*
 ```
 
-### 4. Enlazar al vault
+Enlazar al vault:
 
 ```bash
 VAULT="/ruta/a/tu/vault/.obsidian/plugins"
 ln -sf /ruta/a/Obsidian-Plugins/vault-task-board "$VAULT/vault-task-board"
 ```
 
-### 5. Activar
+Activa **Task Board** antes que Social Agenda.
 
-Ajustes → Complementos de la comunidad → complementos instalados → **Task Board**.
+## Datos
 
-Actívalo **antes** que Social Agenda (expone la API de tareas).
+| Qué | Ruta |
+|-----|------|
+| SQLite | `.obsidian/plugins-data/vault-task-board/kanban_tareas.db` |
+| sql.js | `.obsidian/plugins/vault-task-board/assets/` (incluido en el plugin) |
+
+Al actualizar desde v1.0, copia automática desde `.obsidian/scripts/kanban_tareas.db` si existe.
+
+Ya **no** requiere `npm install sql.js` en `.obsidian/scripts/`.
 
 ## Uso
 
-- Icono de tablero en la cinta lateral
-- Paleta de comandos → **Abrir tablero de tareas**
+- Cinta lateral → icono tablero
+- Comando → **Abrir tablero de tareas**
 
-Datos: `.obsidian/scripts/kanban_tareas.db` (compatible con el monolito Scripts).
+## API
 
-## API para otros plugins
-
-Expone `TaskBoardBridge` en `window` y en `plugin.api`.
-
-| Evento | Cuándo |
-|--------|--------|
-| `vault-task-board:ready` | Plugin cargado |
-| `vault-task-board:changed` | Cambios en tareas |
-
-**Social Agenda** consume esta API.
+Expone `TaskBoardBridge` para **Social Agenda**. Eventos: `vault-task-board:ready`, `vault-task-board:changed`.
 
 ## Desarrollo
 
 ```bash
-npm run dev    # watch
-npm run build  # producción
+npm run dev
+npm run build
 ```
