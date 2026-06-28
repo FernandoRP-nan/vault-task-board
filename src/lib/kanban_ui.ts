@@ -2,13 +2,29 @@
 // @ts-nocheck
 import { KanbanDB } from "./kanban_db";
 import { KanbanModals } from "./kanban_modals";
+import { KanbanPrefs } from "./kanban_prefs";
+import { DiagramaExpandidoModal } from "./kanban_diagram_modal";
+import { abrirBusquedaTareas } from "./kanban_search";
+import { montarStageDiagrama, inicializarViewportDiagrama } from "./kanban_diagram_viewport";
 import { Modal, Setting, SuggestModal, Notice } from "obsidian";
 
 /* kanban_ui.js - Mapa Dr. Stone (Mermaid) + Tablero Kanban con Drag & Drop */
 
+let kanbanUiApp = null;
+
 export const KanbanUI = {
     ESTADOS: ["Por Hacer", "En Proceso", "Terminado"],
     MIME_TAREA_DRAG: "application/x-kanban-tarea-id",
+
+    configure: (app) => {
+        kanbanUiApp = app;
+    },
+
+    _getApp: () => kanbanUiApp,
+
+    _abrirBusquedaTareas: (app, db, dbPath, onRefresh) => {
+        abrirBusquedaTareas(app, db, dbPath, onRefresh, KanbanUI._abrirEdicionTarea);
+    },
 
     _extraerTareaIdDesdeDataTransfer: (dataTransfer) => {
         const custom = dataTransfer.getData(KanbanUI.MIME_TAREA_DRAG);
@@ -57,14 +73,110 @@ export const KanbanUI = {
                 color: var(--text-accent);
             }
             .kanban-mermaid-contenedor {
-                overflow-x: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
                 min-height: 120px;
+            }
+            .kanban-mermaid-zoom-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .kanban-mermaid-zoom-bar {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+            .kanban-mermaid-zoom-btn {
+                min-width: 32px;
+                padding: 4px 10px;
+                border-radius: 6px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                color: var(--text-normal);
+                cursor: pointer;
+                font-weight: 600;
+                line-height: 1.2;
+            }
+            .kanban-mermaid-zoom-btn:hover {
+                border-color: var(--interactive-accent);
+            }
+            .kanban-mermaid-zoom-label {
+                min-width: 3.2em;
+                text-align: center;
+                font-size: 0.85em;
+                color: var(--text-muted);
+                font-variant-numeric: tabular-nums;
+            }
+            .kanban-mermaid-viewport {
+                position: relative;
+                height: min(420px, 48vh);
+                min-height: 220px;
+                overflow: hidden;
+                border: 1px solid var(--background-modifier-border);
+                border-radius: 8px;
+                background: var(--background-primary);
+                overscroll-behavior: contain;
+                cursor: default;
+                scrollbar-width: none;
+            }
+            .kanban-mermaid-viewport::-webkit-scrollbar {
+                display: none;
+            }
+            .kanban-mermaid-stage {
+                transform-origin: 0 0;
+                will-change: transform;
+            }
+            .kanban-mermaid-minimap {
+                position: absolute;
+                right: 10px;
+                bottom: 10px;
+                width: 128px;
+                height: 84px;
+                border: 1px solid var(--background-modifier-border);
+                border-radius: 8px;
+                background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+                z-index: 12;
+                overflow: hidden;
+                cursor: crosshair;
+                backdrop-filter: blur(4px);
+                pointer-events: auto;
+            }
+            .kanban-mermaid-minimap.kanban-minimap-oculto {
+                display: none;
+            }
+            .kanban-mermaid-minimap-inner {
+                transform-origin: 0 0;
+                pointer-events: none;
+                opacity: 0.72;
+            }
+            .kanban-mermaid-minimap-inner svg {
+                display: block;
+                max-width: none;
+            }
+            .kanban-mermaid-minimap-lens {
+                position: absolute;
+                left: 0;
+                top: 0;
+                border: 2px solid var(--interactive-accent);
+                background: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+                border-radius: 3px;
+                box-sizing: border-box;
+                pointer-events: none;
+            }
+            .kanban-mermaid-viewport.kanban-mermaid-panning {
+                cursor: grabbing;
+                user-select: none;
             }
             .kanban-mermaid-svg {
                 position: relative;
             }
             .kanban-mermaid-svg svg {
-                max-width: 100%;
+                max-width: none;
                 height: auto;
             }
             .kanban-mermaid-svg svg { display: block; }
@@ -166,6 +278,75 @@ export const KanbanUI = {
                 font-size: 0.85em;
                 color: var(--text-muted);
             }
+            .kanban-mapa-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                flex-wrap: wrap;
+                margin-bottom: 8px;
+            }
+            .kanban-mapa-header h3 {
+                margin: 0;
+                color: var(--text-accent);
+            }
+            .kanban-btn-colapsar-mapa {
+                padding: 4px 12px;
+                border-radius: 6px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                cursor: pointer;
+                font-size: 0.85em;
+                white-space: nowrap;
+            }
+            .kanban-btn-colapsar-mapa:hover {
+                border-color: var(--interactive-accent);
+            }
+            .kanban-mapa-cuerpo--oculto {
+                display: none !important;
+            }
+            .kanban-subtarea-grip {
+                cursor: grab;
+                color: var(--text-muted);
+                font-size: 1.1em;
+                line-height: 1;
+                padding: 4px 2px;
+                flex-shrink: 0;
+                user-select: none;
+            }
+            .kanban-subtarea-fila.kanban-subtarea-arrastrando {
+                opacity: 0.55;
+            }
+            .kanban-subtarea-fila.kanban-subtarea-drop-target {
+                outline: 2px dashed var(--interactive-accent);
+                outline-offset: 2px;
+            }
+            .kanban-tarjeta-progreso {
+                height: 4px;
+                border-radius: 4px;
+                background: var(--background-modifier-border);
+                margin-top: 8px;
+                overflow: hidden;
+            }
+            .kanban-tarjeta-progreso-fill {
+                height: 100%;
+                border-radius: 4px;
+                background: var(--interactive-accent);
+                transition: width 0.2s ease;
+            }
+            .kanban-modal-atajos {
+                font-size: 0.82em;
+                color: var(--text-muted);
+                margin: 0 0 12px 0;
+            }
+            .modal.kanban-modal-diagrama-expandido {
+                width: min(96vw, 1200px);
+                max-width: 96vw;
+            }
+            .kanban-diagrama-expandido-host .kanban-mermaid-viewport {
+                height: min(72vh, 680px);
+                min-height: 360px;
+            }
             .kanban-seccion-tablero {
                 background: var(--background-secondary);
                 border: 1px solid var(--background-modifier-border);
@@ -259,6 +440,14 @@ export const KanbanUI = {
                 gap: 10px;
                 flex-wrap: wrap;
             }
+            .kanban-btn-gestion-proyectos {
+                padding: 6px 12px;
+                border-radius: 6px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-primary);
+                cursor: pointer;
+            }
+            .kanban-btn-buscar,
             .kanban-btn-gestion-proyectos {
                 background: var(--background-primary);
                 color: var(--text-normal);
@@ -505,7 +694,16 @@ export const KanbanUI = {
                 flex-wrap: wrap;
             }
             .kanban-fila-proyecto .kanban-input { flex: 1; min-width: 120px; }
-            .kanban-input-sub { flex: 1; min-width: 140px; }
+            .kanban-input-sub {
+                flex: 1;
+                min-width: 140px;
+                resize: none;
+                overflow: hidden;
+                min-height: 2.5em;
+                line-height: 1.45;
+                word-break: break-word;
+                white-space: pre-wrap;
+            }
             .kanban-chips-requisitos {
                 display: flex;
                 flex-wrap: wrap;
@@ -538,23 +736,30 @@ export const KanbanUI = {
             .kanban-subtareas-lista {
                 display: flex;
                 flex-direction: column;
-                gap: 6px;
-                max-height: 180px;
+                gap: 8px;
+                max-height: min(320px, 40vh);
                 overflow-y: auto;
             }
             .kanban-subtarea-fila {
                 display: flex;
-                align-items: center;
+                align-items: flex-start;
                 gap: 8px;
             }
             .kanban-subtarea-fila input[type="checkbox"] {
                 width: auto;
                 flex-shrink: 0;
+                margin-top: 10px;
                 accent-color: var(--interactive-accent);
             }
             .kanban-subtarea-texto {
                 flex: 1;
                 min-width: 0;
+                resize: none;
+                overflow: hidden;
+                min-height: 2.5em;
+                line-height: 1.45;
+                word-break: break-word;
+                white-space: pre-wrap;
             }
             .kanban-subtarea-fila:has(input[type="checkbox"]:checked) .kanban-subtarea-texto {
                 opacity: 0.55;
@@ -767,6 +972,64 @@ export const KanbanUI = {
         hostEl.innerHTML = `<pre style="font-size:0.85em;color:var(--text-error);white-space:pre-wrap;">${codigo}</pre>`;
     },
 
+    _montarDiagramaConZoom: () => {
+        const wrap = document.createElement("div");
+        wrap.className = "kanban-mermaid-zoom-wrap";
+        const bar = document.createElement("div");
+        bar.className = "kanban-mermaid-zoom-bar";
+        const stageParts = montarStageDiagrama();
+
+        wrap.appendChild(bar);
+        wrap.appendChild(stageParts.viewport);
+
+        return { wrap, bar, ...stageParts };
+    },
+
+    _inicializarZoomDiagrama: (parts, opts = {}) => {
+        const {
+            bar, viewport, stage, svgHost, minimap, miniInner, miniLens,
+            zoomStorageKey = null,
+            permitirExpandir = true,
+            expandPayload = null
+        } = { ...parts, ...opts };
+
+        const label = document.createElement("span");
+        label.className = "kanban-mermaid-zoom-label";
+
+        const mkBtn = (texto, titulo, fn) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "kanban-mermaid-zoom-btn";
+            btn.textContent = texto;
+            btn.title = titulo;
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                fn();
+            });
+            return btn;
+        };
+
+        const vista = inicializarViewportDiagrama(
+            viewport, stage, svgHost, minimap, miniInner, miniLens,
+            { zoomStorageKey, label }
+        );
+
+        bar.appendChild(mkBtn("−", "Alejar (Ctrl + rueda)", () => vista.zoomOut()));
+        bar.appendChild(label);
+        bar.appendChild(mkBtn("+", "Acercar (Ctrl + rueda)", () => vista.zoomIn()));
+        bar.appendChild(mkBtn("⟲", "Restablecer vista", () => vista.resetVista()));
+
+        if (permitirExpandir && expandPayload) {
+            bar.appendChild(mkBtn("⛶", "Pantalla completa", () => {
+                const app = KanbanUI._getApp();
+                if (!app) return;
+                new DiagramaExpandidoModal(app, expandPayload).open();
+            }));
+        }
+
+        return vista;
+    },
+
     _extraerTareaIdDesdeNodoMermaid: (elemento, svgRoot) => {
         const marcado = elemento.closest?.("[data-tarea-id]");
         if (marcado?.dataset.tareaId) return parseInt(marcado.dataset.tareaId, 10);
@@ -852,17 +1115,19 @@ export const KanbanUI = {
         });
     },
 
-    _abrirEdicionTarea: (db, dbPath, tareaId) => {
+    _abrirEdicionTarea: (db, dbPath, tareaId, onRefresh) => {
         const actualizada = KanbanDB.obtenerTodas(db).find(x => x.id === tareaId);
         if (!actualizada) return;
+        const app = KanbanUI._getApp();
+        if (!app) return;
         new KanbanModals.TareaFormModal(
-            app, db, dbPath, actualizada, () => window.ejecutarRenderKanban()
+            app, db, dbPath, actualizada, onRefresh
         ).open();
     },
 
-    _enlazarClicksMermaidDom: (hostEl, tareas, db, dbPath) => {
+    _enlazarClicksMermaidDom: (hostEl, tareas, db, dbPath, onRefresh) => {
         KanbanUI._etiquetarNodosMermaid(hostEl, tareas);
-        KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath);
+        return KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath, onRefresh);
     },
 
     // Elige el overlay cuyo centro está más cerca del puntero (evita tomar el último del DOM)
@@ -897,9 +1162,9 @@ export const KanbanUI = {
             || svg.querySelector(`[data-tarea-id="${tareaId}"]`);
     },
 
-    _enlazarInteraccionOverlaysMermaid: (hostEl, db, dbPath) => {
+    _enlazarInteraccionOverlaysMermaid: (hostEl, db, dbPath, onRefresh) => {
         const svg = hostEl.querySelector("svg");
-        if (!svg) return;
+        if (!svg) return null;
 
         hostEl.querySelector(".kanban-mermaid-overlays")?.remove();
 
@@ -941,7 +1206,7 @@ export const KanbanUI = {
                     new Notice(
                         `🔗 "${arrastrado?.texto || `#${arrastradoId}`}" ahora requiere "${requisito?.texto || `#${requisitoId}`}"`
                     );
-                    window.ejecutarRenderKanban();
+                    void onRefresh?.();
                 } else if (resultado.motivo === "ya_existe") {
                     new Notice("ℹ️ Ese requisito ya estaba definido.");
                 }
@@ -971,6 +1236,8 @@ export const KanbanUI = {
         };
 
         const posicionarOverlays = () => {
+            if (activo) return;
+            const zoom = Math.max(0.01, parseFloat(hostEl.dataset.kanbanZoom || "1") || 1);
             capa.innerHTML = "";
             const hostRect = hostEl.getBoundingClientRect();
             const vistos = new Set();
@@ -981,31 +1248,39 @@ export const KanbanUI = {
                 vistos.add(tareaId);
 
                 const rect = nodo.getBoundingClientRect();
-                if (rect.width < 4 || rect.height < 4) return;
+                if (rect.width < 2 || rect.height < 2) return;
 
                 const ov = document.createElement("div");
                 ov.className = "kanban-mermaid-overlay";
                 ov.dataset.tareaId = tareaId;
                 ov.title = nodo.querySelector("text")?.textContent?.trim() || "";
-                ov.style.left = `${rect.left - hostRect.left}px`;
-                ov.style.top = `${rect.top - hostRect.top}px`;
-                ov.style.width = `${rect.width}px`;
-                ov.style.height = `${rect.height}px`;
+                ov.style.left = `${(rect.left - hostRect.left) / zoom}px`;
+                ov.style.top = `${(rect.top - hostRect.top) / zoom}px`;
+                ov.style.width = `${rect.width / zoom}px`;
+                ov.style.height = `${rect.height / zoom}px`;
                 capa.appendChild(ov);
             });
         };
 
-        requestAnimationFrame(() => requestAnimationFrame(posicionarOverlays));
-
-        const scrollPadre = hostEl.closest(".kanban-mermaid-contenedor");
-        const reprogramar = () => requestAnimationFrame(posicionarOverlays);
-        scrollPadre?.addEventListener("scroll", reprogramar, { passive: true });
+        let posicionPendiente = null;
+        const reprogramar = () => {
+            if (posicionPendiente != null) cancelAnimationFrame(posicionPendiente);
+            posicionPendiente = requestAnimationFrame(() => {
+                posicionPendiente = null;
+                posicionarOverlays();
+            });
+        };
+        hostEl.addEventListener("kanban-mermaid-resize", reprogramar);
         window.addEventListener("resize", reprogramar, { passive: true });
 
         const finalizarArrastre = async (clientX, clientY) => {
             if (!activo) return;
 
-            const { overlay, tareaId, arrastrando, fantasma } = activo;
+            const { overlay, tareaId, arrastrando, fantasma, startX, startY } = activo;
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+            const fueClick = !arrastrando && Math.hypot(dx, dy) < UMBRAL_PX;
+
             overlay.classList.remove("kanban-mermaid-arrastrando");
             overlay.style.pointerEvents = "";
             KanbanUI._nodoSvgDesdeOverlay(svg, overlay)
@@ -1013,20 +1288,20 @@ export const KanbanUI = {
             if (fantasma) fantasma.remove();
 
             if (arrastrando) {
-                // Priorizar el chip que estaba resaltado durante el arrastre
                 const destino = overlayDestino
                     || KanbanUI._overlayEnPunto(capa, clientX, clientY, overlay);
                 if (destino) {
                     const destinoId = parseInt(destino.dataset.tareaId, 10);
                     await aplicarRequisito(tareaId, destinoId);
                 }
-                window._kanbanSuprimirClickMermaid = true;
-                setTimeout(() => { window._kanbanSuprimirClickMermaid = false; }, 250);
+            } else if (fueClick) {
+                KanbanUI._abrirEdicionTarea(db, dbPath, tareaId, onRefresh);
             }
 
             limpiarDestino();
             activo = null;
             document.body.style.userSelect = "";
+            if (arrastrando) reprogramar();
         };
 
         const moverDocumento = (e) => {
@@ -1084,15 +1359,6 @@ export const KanbanUI = {
             document.addEventListener("mousemove", moverDocumento);
             document.addEventListener("mouseup", soltarDocumento);
             e.preventDefault();
-            e.stopPropagation();
-        });
-
-        capa.addEventListener("click", (e) => {
-            if (window._kanbanSuprimirClickMermaid) return;
-            const overlay = e.target.closest?.(".kanban-mermaid-overlay");
-            if (!overlay) return;
-            const tareaId = parseInt(overlay.dataset.tareaId, 10);
-            if (tareaId) KanbanUI._abrirEdicionTarea(db, dbPath, tareaId);
         });
 
         hostEl.addEventListener("dragover", (e) => {
@@ -1124,6 +1390,8 @@ export const KanbanUI = {
             const destinoId = parseInt(destino.dataset.tareaId, 10);
             await aplicarRequisito(origenId, destinoId);
         }, true);
+
+        return capa;
     },
 
     _construirMermaid: (tareas, agruparPorProyecto = false) => {
@@ -1176,7 +1444,16 @@ export const KanbanUI = {
         return codigo;
     },
 
-    _renderBloqueMermaid: async (contenedor, tareas, db, dbPath, tituloProyecto, indiceColor, agruparPorProyecto) => {
+    _renderBloqueMermaid: async (
+        contenedor, tareas, db, dbPath, tituloProyecto, indiceColor,
+        agruparPorProyecto, onRefresh, zoomKey = "main", permitirExpandir = true
+    ) => {
+        const { wrap, bar, viewport, stage, svgHost, minimap, miniInner, miniLens } = KanbanUI._montarDiagramaConZoom();
+        const storageKey = KanbanPrefs.diagramZoomKey(zoomKey);
+        const tituloExpand = tituloProyecto
+            ? `🔬 ${tituloProyecto}`
+            : "🔬 Mapa de dependencias";
+
         if (tituloProyecto != null) {
             const bloque = document.createElement("div");
             bloque.className = "kanban-mapa-proyecto";
@@ -1188,42 +1465,72 @@ export const KanbanUI = {
             h4.className = "kanban-mapa-proyecto-titulo";
             h4.textContent = `📁 ${tituloProyecto}`;
             bloque.appendChild(h4);
-
-            const svgHost = document.createElement("div");
-            svgHost.className = "kanban-mermaid-svg";
-            bloque.appendChild(svgHost);
+            bloque.appendChild(wrap);
             contenedor.appendChild(bloque);
-
-            const codigo = KanbanUI._construirMermaid(tareas, false);
-            await KanbanUI._renderMermaidSvg(svgHost, codigo);
-            KanbanUI._pulirEstiloNodosMermaid(svgHost);
-            KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
-            return;
+        } else {
+            contenedor.appendChild(wrap);
         }
 
-        const codigo = KanbanUI._construirMermaid(tareas, agruparPorProyecto);
-        const svgHost = document.createElement("div");
-        svgHost.className = "kanban-mermaid-svg";
-        contenedor.appendChild(svgHost);
+        const codigo = KanbanUI._construirMermaid(tareas, tituloProyecto == null && agruparPorProyecto);
         await KanbanUI._renderMermaidSvg(svgHost, codigo);
         KanbanUI._pulirEstiloNodosMermaid(svgHost);
-        KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath);
+        const vista = KanbanUI._inicializarZoomDiagrama(
+            { bar, viewport, stage, svgHost, minimap, miniInner, miniLens },
+            {
+                zoomStorageKey: storageKey,
+                permitirExpandir,
+                expandPayload: {
+                    tareas,
+                    db,
+                    dbPath,
+                    onRefresh,
+                    titulo: tituloExpand,
+                    zoomKey: `${zoomKey}:exp`
+                }
+            }
+        );
+        const capaOverlays = KanbanUI._enlazarClicksMermaidDom(svgHost, tareas, db, dbPath, onRefresh);
+        vista.enlazarCapaPan?.(capaOverlays);
+        vista.iniciar();
     },
 
-    _renderMapa: async (contenedor, tareas, proyectoFiltro, db, dbPath) => {
+    _renderMapa: async (contenedor, tareas, proyectoFiltro, db, dbPath, onRefresh) => {
         const wrapper = document.createElement("div");
         wrapper.className = "kanban-seccion-mapa";
+
+        const header = document.createElement("div");
+        header.className = "kanban-mapa-header";
 
         const titulo = document.createElement("h3");
         titulo.textContent = proyectoFiltro
             ? `🔬 Mapa de Dependencias — ${proyectoFiltro}`
             : "🔬 Mapa de Dependencias — Árbol de Ciencia";
-        wrapper.appendChild(titulo);
+        header.appendChild(titulo);
+
+        const btnColapsar = document.createElement("button");
+        btnColapsar.type = "button";
+        btnColapsar.className = "kanban-btn-colapsar-mapa";
+
+        const cuerpo = document.createElement("div");
+        cuerpo.className = "kanban-mapa-cuerpo";
+
+        const aplicarColapso = (colapsado) => {
+            cuerpo.classList.toggle("kanban-mapa-cuerpo--oculto", colapsado);
+            btnColapsar.textContent = colapsado ? "▶ Mostrar mapa" : "▼ Ocultar mapa";
+            KanbanPrefs.setMapaColapsado(colapsado);
+        };
+
+        aplicarColapso(KanbanPrefs.isMapaColapsado());
+        btnColapsar.addEventListener("click", () => {
+            aplicarColapso(!cuerpo.classList.contains("kanban-mapa-cuerpo--oculto"));
+        });
+        header.appendChild(btnColapsar);
+        wrapper.appendChild(header);
 
         const hint = document.createElement("p");
         hint.className = "kanban-mermaid-hint";
-        hint.textContent = "💡 Arrastra un chip y suéltalo sobre otro: el resaltado será el nuevo requisito del arrastrado. Clic para editar.";
-        wrapper.appendChild(hint);
+        hint.textContent = "💡 Arrastra chips · Clic editar · Rueda desplaza · Ctrl+rueda zoom · Botón central o Alt+arrastrar · Minimapa si el diagrama no cabe.";
+        cuerpo.appendChild(hint);
 
         const mermaidHost = document.createElement("div");
         mermaidHost.className = "kanban-mermaid-contenedor";
@@ -1237,20 +1544,22 @@ export const KanbanUI = {
             const grupos = KanbanUI._agruparPorProyecto(tareas);
             for (let i = 0; i < grupos.length; i++) {
                 await KanbanUI._renderBloqueMermaid(
-                    mermaidHost, grupos[i].tareas, db, dbPath, grupos[i].nombre, i, false
+                    mermaidHost, grupos[i].tareas, db, dbPath,
+                    grupos[i].nombre, i, false, onRefresh, grupos[i].nombre
                 );
             }
         } else {
             await KanbanUI._renderBloqueMermaid(
-                mermaidHost, tareas, db, dbPath, null, 0, false
+                mermaidHost, tareas, db, dbPath, null, 0, false, onRefresh, proyectoFiltro
             );
         }
 
-        wrapper.appendChild(mermaidHost);
+        cuerpo.appendChild(mermaidHost);
+        wrapper.appendChild(cuerpo);
         contenedor.appendChild(wrapper);
     },
 
-    _crearTarjeta: (tarea, mapaTareas, db, dbPath, ocultarProyecto = false) => {
+    _crearTarjeta: (tarea, mapaTareas, db, dbPath, ocultarProyecto = false, onRefresh) => {
         const bloqueada = KanbanUI._esBloqueada(tarea, mapaTareas);
         const card = document.createElement("div");
         card.className = "kanban-tarjeta" + (bloqueada ? " kanban-tarjeta-bloqueada" : "");
@@ -1273,7 +1582,7 @@ export const KanbanUI = {
         btnEdit.title = "Editar tarea";
         btnEdit.addEventListener("click", (e) => {
             e.stopPropagation();
-            KanbanUI._abrirEdicionTarea(db, dbPath, tarea.id);
+            KanbanUI._abrirEdicionTarea(db, dbPath, tarea.id, onRefresh);
         });
         acciones.appendChild(btnEdit);
 
@@ -1311,6 +1620,18 @@ export const KanbanUI = {
 
         const subs = tarea.subtareas || [];
         const imgs = tarea.imagenes || [];
+        if (subs.length > 0) {
+            const hechas = subs.filter(s => s.completado).length;
+            const pct = Math.round((hechas / subs.length) * 100);
+            const barra = document.createElement("div");
+            barra.className = "kanban-tarjeta-progreso";
+            barra.title = `Checklist: ${hechas}/${subs.length}`;
+            const fill = document.createElement("div");
+            fill.className = "kanban-tarjeta-progreso-fill";
+            fill.style.width = `${pct}%`;
+            barra.appendChild(fill);
+            card.appendChild(barra);
+        }
         if (subs.length > 0 || imgs.length > 0) {
             const ind = document.createElement("div");
             ind.className = "kanban-tarjeta-indicadores";
@@ -1335,7 +1656,7 @@ export const KanbanUI = {
         return card;
     },
 
-    _configurarColumnaDrop: (colBody, estadoDestino, db, dbPath) => {
+    _configurarColumnaDrop: (colBody, estadoDestino, db, dbPath, onRefresh) => {
         colBody.addEventListener("dragover", (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -1355,7 +1676,7 @@ export const KanbanUI = {
 
             try {
                 await KanbanDB.actualizarEstado(db, dbPath, tareaId, estadoDestino);
-                window.ejecutarRenderKanban();
+                void onRefresh?.();
             } catch (err) {
                 console.error("Error en drop:", err);
                 new Notice("❌ No se pudo mover la tarea.");
@@ -1363,7 +1684,8 @@ export const KanbanUI = {
         });
     },
 
-    _renderPanelSuperior: (contenedor, db, dbPath, proyectoFiltro, setProyectoFiltro) => {
+    _renderPanelSuperior: (contenedor, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro) => {
+        const app = KanbanUI._getApp();
         const panel = document.createElement("div");
         panel.className = "kanban-panel-superior";
 
@@ -1405,19 +1727,30 @@ export const KanbanUI = {
         btnGestion.className = "kanban-btn-gestion-proyectos";
         btnGestion.textContent = "📦 Proyectos";
         btnGestion.addEventListener("click", () => {
+            if (!app) return;
             new KanbanModals.ProyectosGestionModal(
-                app, db, dbPath, proyectoFiltro, setProyectoFiltro,
-                () => window.ejecutarRenderKanban()
+                app, db, dbPath, proyectoFiltro, setProyectoFiltro, onRefresh
             ).open();
         });
         accionesGrupo.appendChild(btnGestion);
+
+        const btnBuscar = document.createElement("button");
+        btnBuscar.className = "kanban-btn-buscar";
+        btnBuscar.textContent = "🔍 Buscar";
+        btnBuscar.title = "Buscar tareas (Ctrl+Shift+F)";
+        btnBuscar.addEventListener("click", () => {
+            if (!app) return;
+            KanbanUI._abrirBusquedaTareas(app, db, dbPath, onRefresh);
+        });
+        accionesGrupo.appendChild(btnBuscar);
 
         const btnNueva = document.createElement("button");
         btnNueva.className = "kanban-btn-nueva";
         btnNueva.textContent = "🧪 Añadir Nueva Tarea";
         btnNueva.addEventListener("click", () => {
+            if (!app) return;
             new KanbanModals.TareaFormModal(
-                app, db, dbPath, null, () => window.ejecutarRenderKanban(), proyectoFiltro
+                app, db, dbPath, null, onRefresh, proyectoFiltro
             ).open();
         });
         accionesGrupo.appendChild(btnNueva);
@@ -1427,7 +1760,7 @@ export const KanbanUI = {
         contenedor.appendChild(panel);
     },
 
-    _renderKanban: (contenedor, tareas, db, dbPath, proyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas, numCompletadas) => {
+    _renderKanban: (contenedor, tareas, db, dbPath, onRefresh, proyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas, numCompletadas) => {
         const mapa = new Map(tareas.map(t => [t.id, t]));
         const bloqueadas = tareas.filter(t => KanbanUI._esBloqueada(t, mapa));
         const tareasVisibles = mostrarBloqueadas
@@ -1551,18 +1884,18 @@ export const KanbanUI = {
 
                     grupo.tareas.forEach(t => {
                         grupoEl.appendChild(
-                            KanbanUI._crearTarjeta(t, mapa, db, dbPath, true)
+                            KanbanUI._crearTarjeta(t, mapa, db, dbPath, true, onRefresh)
                         );
                     });
                     body.appendChild(grupoEl);
                 });
             } else {
                 tareasCol.forEach(t => {
-                    body.appendChild(KanbanUI._crearTarjeta(t, mapa, db, dbPath));
+                    body.appendChild(KanbanUI._crearTarjeta(t, mapa, db, dbPath, false, onRefresh));
                 });
             }
 
-            KanbanUI._configurarColumnaDrop(body, estado, db, dbPath);
+            KanbanUI._configurarColumnaDrop(body, estado, db, dbPath, onRefresh);
             col.appendChild(body);
             columnas.appendChild(col);
         });
@@ -1571,7 +1904,7 @@ export const KanbanUI = {
         contenedor.appendChild(seccion);
     },
 
-    renderDashboard: async (mainContainer, db, dbPath, proyectoFiltro, setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas) => {
+    renderDashboard: async (mainContainer, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas) => {
         while (mainContainer.firstChild) {
             mainContainer.removeChild(mainContainer.firstChild);
         }
@@ -1602,10 +1935,10 @@ export const KanbanUI = {
             ? tareasBase
             : tareasBase.filter(t => t.estado !== "Terminado");
 
-        KanbanUI._renderPanelSuperior(layout, db, dbPath, proyectoFiltro, setProyectoFiltro);
-        await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath);
+        KanbanUI._renderPanelSuperior(layout, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro);
+        await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath, onRefresh);
         KanbanUI._renderKanban(
-            layout, tareas, db, dbPath, proyectoFiltro,
+            layout, tareas, db, dbPath, onRefresh, proyectoFiltro,
             mostrarBloqueadas, setMostrarBloqueadas,
             mostrarCompletadas, setMostrarCompletadas, numCompletadas
         );

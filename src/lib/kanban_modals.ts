@@ -5,6 +5,92 @@ import { Modal, Setting, SuggestModal, Notice } from "obsidian";
 
 // kanban_modals.js - Modales nativos para crear y editar tareas
 
+/** Ajusta la altura del textarea al contenido visible. */
+function ajustarAlturaTextarea(el) {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+}
+
+function enlazarTextareaAuto(el) {
+    el.addEventListener("input", () => ajustarAlturaTextarea(el));
+    ajustarAlturaTextarea(el);
+}
+
+function crearTextareaSubtarea(valor = "") {
+    const txt = document.createElement("textarea");
+    txt.className = "kanban-input kanban-subtarea-texto";
+    txt.rows = 1;
+    txt.value = valor;
+    txt.placeholder = "Texto de la subtarea…";
+    enlazarTextareaAuto(txt);
+    return txt;
+}
+
+/** Reordenación drag & drop de subtareas en el modal. */
+function enlazarReorderSubtareas(subLista, subtareas, renderSubtareas) {
+    if (subLista.dataset.reorderBound) return;
+    subLista.dataset.reorderBound = "1";
+
+    let origenIdx = null;
+    let objetivoEl = null;
+
+    const limpiarDrop = () => {
+        subLista.querySelectorAll(".kanban-subtarea-drop-target").forEach(el => {
+            el.classList.remove("kanban-subtarea-drop-target");
+        });
+        objetivoEl = null;
+    };
+
+    subLista.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const fila = e.target.closest?.(".kanban-subtarea-fila");
+        limpiarDrop();
+        if (fila) {
+            fila.classList.add("kanban-subtarea-drop-target");
+            objetivoEl = fila;
+        }
+    });
+
+    subLista.addEventListener("dragleave", (e) => {
+        if (!subLista.contains(e.relatedTarget)) limpiarDrop();
+    });
+
+    subLista.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const fila = e.target.closest?.(".kanban-subtarea-fila");
+        limpiarDrop();
+        if (origenIdx == null || !fila) return;
+        const destinoIdx = parseInt(fila.dataset.idx, 10);
+        if (!Number.isFinite(destinoIdx) || origenIdx === destinoIdx) return;
+        const [item] = subtareas.splice(origenIdx, 1);
+        subtareas.splice(destinoIdx, 0, item);
+        origenIdx = null;
+        renderSubtareas();
+    });
+
+    subLista.addEventListener("dragstart", (e) => {
+        const grip = e.target.closest?.(".kanban-subtarea-grip");
+        const fila = grip?.closest(".kanban-subtarea-fila");
+        if (!fila) {
+            e.preventDefault();
+            return;
+        }
+        origenIdx = parseInt(fila.dataset.idx, 10);
+        fila.classList.add("kanban-subtarea-arrastrando");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(origenIdx));
+    });
+
+    subLista.addEventListener("dragend", () => {
+        origenIdx = null;
+        limpiarDrop();
+        subLista.querySelectorAll(".kanban-subtarea-arrastrando").forEach(el => {
+            el.classList.remove("kanban-subtarea-arrastrando");
+        });
+    });
+}
+
 class ProyectoSuggestModal extends SuggestModal {
     constructor(app, proyectos, onSelect) {
         super(app);
@@ -204,6 +290,10 @@ class TareaFormModal extends Modal {
             text: esEdicion ? "✏️ Editar Tarea" : "🧪 Nueva Tarea",
             cls: "kanban-modal-tarea-titulo"
         });
+        contentEl.createEl("p", {
+            cls: "kanban-modal-atajos",
+            text: "Atajos: Enter en título → proyecto · Enter en nueva subtarea → guardar · Ctrl+Enter guardar · Ctrl+Shift+Enter añadir subtarea"
+        });
 
         const formDoble = contentEl.createEl("div", { cls: "kanban-form-doble" });
         const colIzq = formDoble.createEl("div", { cls: "kanban-form-columna kanban-form-columna-izq" });
@@ -313,8 +403,21 @@ class TareaFormModal extends Modal {
         subWrap.createEl("label", { text: "Checklist interna:" });
         const subLista = subWrap.createEl("div", { cls: "kanban-subtareas-lista" });
         const subAcciones = subWrap.createEl("div", { cls: "kanban-fila-acciones" });
-        const inNuevaSub = subAcciones.createEl("input", {
-            type: "text", placeholder: "Nueva subtarea...", cls: "kanban-input kanban-input-sub"
+        const inNuevaSub = subAcciones.createEl("textarea", {
+            placeholder: "Nueva subtarea… (Enter guarda · Shift+Enter línea nueva)",
+            cls: "kanban-input kanban-input-sub",
+            attr: { rows: "1" }
+        });
+        enlazarTextareaAuto(inNuevaSub);
+
+        inTexto.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+            e.preventDefault();
+            if (!inProyecto.value.trim()) {
+                inProyecto.focus();
+                return;
+            }
+            inNuevaSub.focus();
         });
 
         const renderSubtareas = () => {
@@ -325,13 +428,19 @@ class TareaFormModal extends Modal {
             }
             this.subtareas.forEach((st, idx) => {
                 const fila = subLista.createEl("div", { cls: "kanban-subtarea-fila" });
+                fila.dataset.idx = String(idx);
+                const grip = fila.createEl("span", {
+                    cls: "kanban-subtarea-grip",
+                    text: "⠿",
+                    attr: { title: "Arrastrar para reordenar", draggable: "true" }
+                });
+                grip.draggable = true;
                 const chk = fila.createEl("input", { type: "checkbox" });
                 chk.checked = st.completado;
                 chk.onchange = () => { st.completado = chk.checked; };
-                const txt = fila.createEl("input", {
-                    type: "text", value: st.texto, cls: "kanban-input kanban-subtarea-texto"
-                });
+                const txt = crearTextareaSubtarea(st.texto);
                 txt.oninput = () => { st.texto = txt.value; };
+                fila.appendChild(txt);
                 fila.createEl("button", { text: "✕", cls: "kanban-subtarea-quitar" }).onclick = (e) => {
                     e.preventDefault();
                     this.subtareas.splice(idx, 1);
@@ -340,21 +449,20 @@ class TareaFormModal extends Modal {
             });
         };
         renderSubtareas();
+        enlazarReorderSubtareas(subLista, this.subtareas, renderSubtareas);
 
         const agregarSub = () => {
             const texto = inNuevaSub.value.trim();
             if (!texto) return;
             this.subtareas.push({ texto, completado: false });
             inNuevaSub.value = "";
+            enlazarTextareaAuto(inNuevaSub);
             renderSubtareas();
         };
-        subAcciones.createEl("button", { text: "+ Añadir" }).onclick = (e) => {
+        subAcciones.createEl("button", { text: "+ Añadir", attr: { title: "Añadir subtarea sin cerrar el formulario" } }).onclick = (e) => {
             e.preventDefault();
             agregarSub();
         };
-        inNuevaSub.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") { e.preventDefault(); agregarSub(); }
-        });
 
         const notaWrap = colDer.createEl("div", { cls: "kanban-campo kanban-campo-nota" });
         notaWrap.createEl("label", { text: "Nota interna:" });
@@ -458,7 +566,7 @@ class TareaFormModal extends Modal {
             style: "background-color: var(--interactive-accent); color: var(--text-on-accent); font-weight: bold; border: none; padding: 8px 18px; border-radius: 6px;"
         });
 
-        btnGuardar.onclick = () => {
+        const guardarTarea = () => {
             const texto = inTexto.value.trim();
             const proyecto = inProyecto.value.trim();
             const estado = inEstado.value;
@@ -493,13 +601,44 @@ class TareaFormModal extends Modal {
                     KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, payload);
                     new Notice("🔄 Tarea actualizada.");
                 }
-                this.onSaved();
+                try {
+                    this.onSaved?.();
+                } catch (refreshErr) {
+                    console.error("Error refrescando tablero:", refreshErr);
+                    new Notice("⚠️ Guardado OK, pero no se pudo refrescar la vista.");
+                }
                 this.close();
             } catch (err) {
                 console.error("Error guardando tarea:", err);
                 new Notice("❌ Error al guardar en la base de datos.");
             }
         };
+
+        btnGuardar.onclick = () => guardarTarea();
+
+        inNuevaSub.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            if (e.shiftKey) return;
+            if (e.ctrlKey || e.metaKey) return;
+            e.preventDefault();
+            const pendiente = inNuevaSub.value.trim();
+            if (pendiente) {
+                this.subtareas.push({ texto: pendiente, completado: false });
+                inNuevaSub.value = "";
+                ajustarAlturaTextarea(inNuevaSub);
+            }
+            guardarTarea();
+        });
+
+        contentEl.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            if (e.shiftKey) {
+                if (document.activeElement === inNuevaSub) agregarSub();
+                return;
+            }
+            guardarTarea();
+        });
     }
 
     onClose() {
