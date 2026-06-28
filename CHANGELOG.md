@@ -2,6 +2,11 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [2.1.0] - 2026-06-27
+
+### Fixed
+- Scroll vertical en la vista del tablero y en modales de sugerencias.
+
 ## [2.0.0] - 2026-06-27
 
 ### Changed
