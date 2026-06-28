@@ -1,8 +1,12 @@
 {
   "name": "vault-task-board",
   "version": "1.1.0",
-  "description": "Tablero Kanban con proyectos, dependencias y subtareas.",
+  "description": "Kanban board with projects, task dependencies, subtasks, and a public API for companion plugins.",
   "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FernandoRP-nan/vault-task-board.git"
+  },
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"

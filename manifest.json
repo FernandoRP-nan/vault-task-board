@@ -3,7 +3,8 @@
   "name": "Task Board",
   "version": "1.1.0",
   "minAppVersion": "1.5.0",
-  "description": "Tablero Kanban con proyectos, dependencias y subtareas.",
+  "description": "Kanban board with projects, task dependencies, subtasks, and a public API for companion plugins.",
   "author": "FernandoRP-nan",
+  "authorUrl": "https://github.com/FernandoRP-nan",
   "isDesktopOnly": false
 }
