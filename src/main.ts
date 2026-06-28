@@ -2,6 +2,7 @@ import { ItemView, Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { ScriptsRuntime } from "./runtime/scripts-runtime";
 import { KanbanDB } from "./lib/kanban_db";
 import { KanbanUI } from "./lib/kanban_ui";
+import { prepareScrollableView } from "./lib/view-scroll";
 import { TaskBoardBridgeFactory } from "./lib/task-board-bridge";
 import type { TaskBoardApi } from "./types";
 
@@ -62,6 +63,7 @@ class TaskBoardView extends ItemView {
     private proyectoFiltro = "";
     private mostrarBloqueadas = true;
     private mostrarCompletadas = true;
+    private scrollHost: HTMLElement | null = null;
 
     constructor(leaf: WorkspaceLeaf, private plugin: TaskBoardPlugin) {
         super(leaf);
@@ -88,13 +90,24 @@ class TaskBoardView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        this.scrollHost = null;
         this.containerEl.empty();
     }
 
+    private getScrollRoot(): HTMLElement {
+        if (!this.scrollHost?.isConnected) {
+            this.scrollHost = prepareScrollableView(
+                this,
+                VIEW_TYPE,
+                "vault-task-board-root"
+            );
+        }
+        return this.scrollHost;
+    }
+
     private async render(): Promise<void> {
-        const root = this.containerEl;
+        const root = this.getScrollRoot();
         root.empty();
-        root.addClass("vault-task-board-root");
 
         try {
             const SQL = await this.plugin.ensureSql();

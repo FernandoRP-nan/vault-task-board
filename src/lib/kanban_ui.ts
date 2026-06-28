@@ -40,17 +40,6 @@ export const KanbanUI = {
         const styleEl = document.createElement("style");
         styleEl.id = ID;
         styleEl.textContent = `
-            .workspace-leaf-content[data-type="vault-task-board-dashboard"] {
-                height: 100%; overflow: hidden; display: flex; flex-direction: column;
-            }
-            .workspace-leaf-content[data-type="vault-task-board-dashboard"] .view-content {
-                flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
-                -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
-                padding: 16px 20px 28px; box-sizing: border-box;
-            }
-            .suggestion-container {
-                max-height: min(70vh, 520px); overflow-y: auto;
-            }
             .kanban-layout-principal {
                 display: flex;
                 flex-direction: column;

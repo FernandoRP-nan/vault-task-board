@@ -1,6 +1,6 @@
 {
   "name": "vault-task-board",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Kanban board with projects, task dependencies, subtasks, and a public API for companion plugins.",
   "main": "main.js",
   "repository": {
