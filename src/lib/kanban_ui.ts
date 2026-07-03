@@ -1459,6 +1459,9 @@ export const KanbanUI = {
     },
 
     _construirMermaid: (tareas, agruparPorProyecto = false) => {
+        console.log("=== [DEBUG] _construirMermaid ===");
+        console.log("Tareas recibidas:", tareas.map(t => ({ id: t.id, texto: t.texto, estado: t.estado, subtareasCount: t.subtareas ? t.subtareas.length : 0 })));
+        console.log("Preferencia mostrar checklist:", KanbanPrefs.isMostrarChecklist());
         const mapa = new Map(tareas.map(t => [t.id, t]));
         let codigo = "flowchart TD\n";
         codigo += "  classDef bloqueada fill:#1a2332,stroke:#718096,color:#cbd5e1,stroke-width:2px\n";
@@ -1474,7 +1477,7 @@ export const KanbanUI = {
             // Forma stadium (pastilla) para aspecto de chip
             codigo += `${indent}T${t.id}(["${label}"])\n`;
 
-            if (KanbanPrefs.isMostrarChecklist() && t.estado === "En Proceso" && t.subtareas && t.subtareas.length > 0) {
+            if (KanbanPrefs.isMostrarChecklist() && t.estado !== "Terminado" && t.subtareas && t.subtareas.length > 0) {
                 t.subtareas.forEach((st, idx) => {
                     const prefix = st.completado ? "[✓] " : "[ ] ";
                     const subLabel = KanbanUI._formatearTextoNodo(prefix + st.texto);
