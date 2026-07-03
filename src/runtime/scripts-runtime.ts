@@ -197,21 +197,37 @@ export const ScriptsRuntime = {
 
         if (ScriptsRuntime.puedeUsarFs()) {
             const fs = require("fs");
-            const absWasm = ScriptsRuntime.rutaAbsoluta(wasmRel);
-            const absJs = ScriptsRuntime.rutaAbsoluta(jsRel);
+            const path = require("path");
+            let absWasm = ScriptsRuntime.rutaAbsoluta(wasmRel);
+            let absJs = ScriptsRuntime.rutaAbsoluta(jsRel);
             if (!fs.existsSync(absWasm) || !fs.existsSync(absJs)) {
-                throw new Error(`Faltan sql.js en el plugin (${wasmRel}). Ejecuta npm run build.`);
+                const rootDir = path.dirname(path.dirname(absWasm));
+                const fallbackWasm = path.join(rootDir, "sql-wasm.wasm");
+                const fallbackJs = path.join(rootDir, "sql-wasm.js");
+                if (fs.existsSync(fallbackWasm) && fs.existsSync(fallbackJs)) {
+                    absWasm = fallbackWasm;
+                    absJs = fallbackJs;
+                } else {
+                    throw new Error(`Faltan sql.js en el plugin (${wasmRel}). Ejecuta npm run build.`);
+                }
             }
             wasmBinary = new Uint8Array(fs.readFileSync(absWasm));
             initFn = require(absJs);
         } else {
-            const bin = await ScriptsRuntime.leerBinarioAsync(wasmRel);
-            if (!bin) throw new Error(`No se encontró ${wasmRel} en el vault.`);
-            wasmBinary = bin;
-            if (!(await ScriptsRuntime.existeAsync(jsRel))) {
-                throw new Error(`No se encontró ${jsRel} en el vault.`);
+            let bin = await ScriptsRuntime.leerBinarioAsync(wasmRel);
+            let jsPath = jsRel;
+            if (!bin) {
+                const fallbackWasm = wasmRel.replace("/assets/", "/");
+                const fallbackJs = jsRel.replace("/assets/", "/");
+                bin = await ScriptsRuntime.leerBinarioAsync(fallbackWasm);
+                if (!bin) throw new Error(`No se encontró ${wasmRel} en el vault.`);
+                jsPath = fallbackJs;
             }
-            eval(await appRef!.vault.adapter.read(jsRel));
+            wasmBinary = bin;
+            if (!(await ScriptsRuntime.existeAsync(jsPath))) {
+                throw new Error(`No se encontró ${jsPath} en el vault.`);
+            }
+            eval(await appRef!.vault.adapter.read(jsPath));
             initFn = (typeof (globalThis as Record<string, unknown>).initSqlJs !== "undefined"
                 ? (globalThis as Record<string, unknown>).initSqlJs
                 : require("module").exports) as typeof initFn;
