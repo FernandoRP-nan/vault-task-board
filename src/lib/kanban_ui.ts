@@ -856,7 +856,8 @@ export const KanbanUI = {
     },
 
     _esBloqueada: (tarea, mapaTareas) => {
-        const ids = KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas);
+        if (tarea.estado === "Terminado") return false;
+        const ids = KanbanUI._requisitosVisibles(tarea, mapaTareas);
         if (ids.length === 0) return false;
         return ids.some(reqId => {
             const req = mapaTareas.get(reqId);
