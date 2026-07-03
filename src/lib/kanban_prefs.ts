@@ -37,5 +37,21 @@ export const KanbanPrefs = {
         } catch {
             /* ignorar */
         }
+    },
+
+    isMostrarChecklist: (): boolean => {
+        try {
+            return localStorage.getItem(`${PREFIX}:mostrar-checklist`) === "1";
+        } catch {
+            return false;
+        }
+    },
+
+    setMostrarChecklist: (mostrar: boolean): void => {
+        try {
+            localStorage.setItem(`${PREFIX}:mostrar-checklist`, mostrar ? "1" : "0");
+        } catch {
+            /* ignorar */
+        }
     }
 };

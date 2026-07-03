@@ -242,6 +242,16 @@ export const KanbanUI = {
                 fill: #718096;
                 stroke: #718096;
             }
+            .kanban-mermaid-svg .subtareaPendiente rect,
+            .kanban-mermaid-svg .subtareaPendiente polygon,
+            .kanban-mermaid-svg .subtareaPendiente path {
+                stroke-dasharray: 4 4;
+            }
+            .kanban-mermaid-svg .subtareaTerminada rect,
+            .kanban-mermaid-svg .subtareaTerminada polygon,
+            .kanban-mermaid-svg .subtareaTerminada path {
+                stroke-dasharray: 4 4;
+            }
             .kanban-mapa-proyecto {
                 border-radius: 8px;
                 border: 1px solid var(--background-modifier-border);
@@ -913,15 +923,21 @@ export const KanbanUI = {
     _parsearTareaIdDesdeDomId: (domId) => {
         if (!domId) return null;
         const patrones = [
-            /flowchart-T(\d+)-\d+/i,
-            /flowchart-node-T(\d+)/i,
-            /^T(\d+)$/i
+            /flowchart-T(\d+)(?:_S\d+)?-\d+/i,
+            /flowchart-node-T(\d+)(?:_S\d+)?/i,
+            /^T(\d+)(?:_S\d+)?$/i
         ];
         for (const p of patrones) {
             const m = domId.match(p);
             if (m) return parseInt(m[1], 10);
         }
         return null;
+    },
+
+    _parsearSubtareaIdxDesdeDomId: (domId) => {
+        if (!domId) return null;
+        const m = domId.match(/_S(\d+)/i);
+        return m ? parseInt(m[1], 10) : null;
     },
 
     _obtenerApiMermaid: async () => {
@@ -1077,6 +1093,10 @@ export const KanbanUI = {
             if (!tareaId) return;
             const nodo = el.closest("g.node") || el.closest("g") || el;
             nodo.dataset.tareaId = String(tareaId);
+            const subIdx = KanbanUI._parsearSubtareaIdxDesdeDomId(el.id);
+            if (subIdx !== null) {
+                nodo.dataset.subtareaIdx = String(subIdx);
+            }
             idsVinculados.add(tareaId);
         });
 
@@ -1279,9 +1299,25 @@ export const KanbanUI = {
                 const ov = document.createElement("div");
                 ov.className = "kanban-mermaid-overlay";
                 ov.dataset.tareaId = tareaId;
+                const subIdxAttr = nodo.dataset.subtareaIdx;
+                if (subIdxAttr !== undefined) {
+                    ov.dataset.subtareaIdx = subIdxAttr;
+                }
                 const idNum = parseInt(tareaId, 10);
                 const tarea = (tareas || []).find(t => t.id === idNum);
-                ov.title = tarea ? tarea.texto : (nodo.querySelector("text")?.textContent?.trim() || "");
+                let tooltipText = "";
+                if (tarea) {
+                    if (subIdxAttr !== undefined) {
+                        const subIdx = parseInt(subIdxAttr, 10);
+                        const sub = tarea.subtareas?.[subIdx];
+                        tooltipText = sub ? `[Subtarea] ${sub.texto}` : tarea.texto;
+                    } else {
+                        tooltipText = tarea.texto;
+                    }
+                } else {
+                    tooltipText = nodo.querySelector("text")?.textContent?.trim() || "";
+                }
+                ov.title = tooltipText;
                 ov.style.left = `${(rect.left - hostRect.left) / zoom}px`;
                 ov.style.top = `${(rect.top - hostRect.top) / zoom}px`;
                 ov.style.width = `${rect.width / zoom}px`;
@@ -1429,12 +1465,35 @@ export const KanbanUI = {
         codigo += "  classDef porHacer fill:#334155,stroke:#94a3b8,color:#f8fafc,stroke-width:2px\n";
         codigo += "  classDef enProceso fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px\n";
         codigo += "  classDef terminado fill:#059669,stroke:#6ee7b7,color:#ffffff,stroke-width:2px\n";
+        codigo += "  classDef subtareaPendiente fill:#1e293b,stroke:#64748b,color:#94a3b8,stroke-width:1px\n";
+        codigo += "  classDef subtareaTerminada fill:#022c22,stroke:#10b981,color:#a7f3d0,stroke-width:1px\n";
 
         const clases = [];
         const emitirNodo = (t, indent = "  ") => {
             const label = KanbanUI._formatearTextoNodo(t.texto);
             // Forma stadium (pastilla) para aspecto de chip
             codigo += `${indent}T${t.id}(["${label}"])\n`;
+
+            if (KanbanPrefs.isMostrarChecklist() && t.estado === "En Proceso" && t.subtareas && t.subtareas.length > 0) {
+                t.subtareas.forEach((st, idx) => {
+                    const prefix = st.completado ? "[✓] " : "[ ] ";
+                    const subLabel = KanbanUI._formatearTextoNodo(prefix + st.texto);
+                    const subNodeId = `T${t.id}_S${idx}`;
+                    
+                    // Emitir nodo hijo
+                    codigo += `${indent}${subNodeId}["${subLabel}"]\n`;
+                    
+                    // Conectar la tarea con su subtarea
+                    codigo += `${indent}T${t.id} -.-> ${subNodeId}\n`;
+                    
+                    // Asignar clase de estilo
+                    if (st.completado) {
+                        clases.push(`class ${subNodeId} subtareaTerminada`);
+                    } else {
+                        clases.push(`class ${subNodeId} subtareaPendiente`);
+                    }
+                });
+            }
         };
         const emitirClases = (t) => {
             if (KanbanUI._esBloqueada(t, mapa)) clases.push(`class T${t.id} bloqueada`);
@@ -1534,6 +1593,23 @@ export const KanbanUI = {
             ? `🔬 Mapa de Dependencias — ${proyectoFiltro}`
             : "🔬 Mapa de Dependencias — Árbol de Ciencia";
         header.appendChild(titulo);
+
+        const btnChecklist = document.createElement("button");
+        btnChecklist.type = "button";
+        btnChecklist.className = "kanban-btn-colapsar-mapa";
+        btnChecklist.style.marginRight = "8px";
+        const actualizarBotonChecklist = () => {
+            const activo = KanbanPrefs.isMostrarChecklist();
+            btnChecklist.textContent = activo ? "☑ Ocultar checklist" : "☐ Mostrar checklist";
+        };
+        actualizarBotonChecklist();
+        btnChecklist.addEventListener("click", () => {
+            const nuevoVal = !KanbanPrefs.isMostrarChecklist();
+            KanbanPrefs.setMostrarChecklist(nuevoVal);
+            actualizarBotonChecklist();
+            void onRefresh?.();
+        });
+        header.appendChild(btnChecklist);
 
         const btnColapsar = document.createElement("button");
         btnColapsar.type = "button";
