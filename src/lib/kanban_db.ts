@@ -39,6 +39,13 @@ export const KanbanDB = {
 
     KANBAN_IMAGEN_CARPETA: "Adjuntos/Organizador",
     DB_RELATIVE: ".obsidian/plugins-data/vault-task-board/kanban_tareas.db",
+    SCHEMA_PAPELERA: `CREATE TABLE IF NOT EXISTS papelera (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT CHECK( tipo IN ('tarea','proyecto') ) NOT NULL,
+        nombre_entidad TEXT NOT NULL,
+        datos_json TEXT NOT NULL,
+        fecha_eliminacion TEXT DEFAULT (datetime('now', 'localtime'))
+    );`,
 
     // Apertura síncrona desde disco (misma lógica que init; Agenda y Organizador comparten archivo)
     abrirSync: (SQL, dbPath) => ScriptsRuntime.abrirDb(SQL, dbPath, (db, esNueva) => {
@@ -46,6 +53,8 @@ export const KanbanDB = {
         db.run(KanbanDB.SCHEMA_REQUISITOS);
         db.run(KanbanDB.SCHEMA_PROYECTOS);
         db.run(KanbanDB.SCHEMA_SUBTAREAS);
+        db.run(KanbanDB.SCHEMA_PAPELERA);
+        db.run("DELETE FROM papelera WHERE datetime(fecha_eliminacion) < datetime('now', 'localtime', '-30 days')");
         KanbanDB._migrarEsquema(db, esNueva ? null : dbPath);
         KanbanDB._sincronizarProyectosDesdeTareas(db);
         db.run(`INSERT OR IGNORE INTO tarea_requisitos (tarea_id, requisito_id)
@@ -252,6 +261,15 @@ export const KanbanDB = {
     },
 
     eliminarTarea: (db, dbPath, tareaId) => {
+        const todas = KanbanDB.obtenerTodas(db);
+        const t = todas.find(x => x.id === tareaId);
+        if (t) {
+            const datosJson = JSON.stringify(t);
+            const stmt = db.prepare("INSERT INTO papelera (tipo, nombre_entidad, datos_json) VALUES ('tarea', ?, ?)");
+            stmt.run([t.texto, datosJson]);
+            stmt.free();
+        }
+
         const stmt = db.prepare("DELETE FROM tareas WHERE id = :id");
         stmt.run({ ":id": tareaId });
         stmt.free();
@@ -415,8 +433,133 @@ export const KanbanDB = {
     },
 
     eliminarProyecto: (db, dbPath, nombre) => {
+        const todas = KanbanDB.obtenerTodas(db);
+        const tareasProyecto = todas.filter(t => t.proyecto === nombre);
+        const datosProyecto = {
+            proyecto: nombre,
+            tareas: tareasProyecto
+        };
+        const datosJson = JSON.stringify(datosProyecto);
+        const stmt = db.prepare("INSERT INTO papelera (tipo, nombre_entidad, datos_json) VALUES ('proyecto', ?, ?)");
+        stmt.run([nombre, datosJson]);
+        stmt.free();
+
         db.run("DELETE FROM tareas WHERE proyecto = ?", [nombre]);
         db.run("DELETE FROM proyectos WHERE nombre = ?", [nombre]);
+        KanbanDB.guardar(db, dbPath);
+    },
+
+    obtenerPapelera: (db) => {
+        const stmt = db.prepare("SELECT id, tipo, nombre_entidad, datos_json, fecha_eliminacion FROM papelera ORDER BY id DESC");
+        const list = [];
+        while (stmt.step()) {
+            const [id, tipo, nombreEntidad, datosJson, fecha] = stmt.get();
+            list.push({ id, tipo, nombreEntidad, datosJson, fecha });
+        }
+        stmt.free();
+        return list;
+    },
+
+    eliminarPapeleraPermanente: (db, dbPath, id) => {
+        db.run("DELETE FROM papelera WHERE id = ?", [id]);
+        KanbanDB.guardar(db, dbPath);
+    },
+
+    restaurarPapelera: (db, dbPath, id) => {
+        const stmt = db.prepare("SELECT tipo, datos_json FROM papelera WHERE id = ?");
+        let tipo = "";
+        let datosJson = "";
+        if (stmt.step()) {
+            const r = stmt.get();
+            tipo = r[0];
+            datosJson = r[1];
+        }
+        stmt.free();
+
+        if (!datosJson) return;
+
+        const datos = JSON.parse(datosJson);
+
+        if (tipo === "tarea") {
+            const existe = db.exec("SELECT id FROM tareas WHERE id = ?", [datos.id])[0]?.values?.length > 0;
+            const insertId = existe ? null : datos.id;
+            
+            let query = "";
+            let params = {};
+            if (insertId) {
+                query = "INSERT INTO tareas (id, texto, proyecto, estado, nota, imagenes) VALUES (:id, :texto, :proyecto, :estado, :nota, :imagenes)";
+                params = {
+                    ":id": insertId,
+                    ":texto": datos.texto,
+                    ":proyecto": datos.proyecto,
+                    ":estado": datos.estado,
+                    ":nota": datos.nota,
+                    ":imagenes": JSON.stringify(datos.imagenes || [])
+                };
+            } else {
+                query = "INSERT INTO tareas (texto, proyecto, estado, nota, imagenes) VALUES (:texto, :proyecto, :estado, :nota, :imagenes)";
+                params = {
+                    ":texto": datos.texto,
+                    ":proyecto": datos.proyecto,
+                    ":estado": datos.estado,
+                    ":nota": datos.nota,
+                    ":imagenes": JSON.stringify(datos.imagenes || [])
+                };
+            }
+            const stmtIns = db.prepare(query);
+            stmtIns.run(params);
+            stmtIns.free();
+            
+            const newId = insertId || db.exec("SELECT last_insert_rowid()")[0].values[0][0];
+            KanbanDB.guardarSubtareas(db, newId, datos.subtareas);
+            
+            const todas = KanbanDB.obtenerTodas(db);
+            const validReqs = (datos.requisito_ids || []).filter(reqId => todas.some(t => t.id === reqId));
+            KanbanDB.guardarRequisitos(db, newId, validReqs);
+        } else if (tipo === "proyecto") {
+            KanbanDB._asegurarProyectoActivo(db, datos.proyecto);
+            (datos.tareas || []).forEach(tDatos => {
+                const existe = db.exec("SELECT id FROM tareas WHERE id = ?", [tDatos.id])[0]?.values?.length > 0;
+                const insertId = existe ? null : tDatos.id;
+                
+                let query = "";
+                let params = {};
+                if (insertId) {
+                    query = "INSERT INTO tareas (id, texto, proyecto, estado, nota, imagenes) VALUES (:id, :texto, :proyecto, :estado, :nota, :imagenes)";
+                    params = {
+                        ":id": insertId,
+                        ":texto": tDatos.texto,
+                        ":proyecto": tDatos.proyecto,
+                        ":estado": tDatos.estado,
+                        ":nota": tDatos.nota,
+                        ":imagenes": JSON.stringify(tDatos.imagenes || [])
+                    };
+                } else {
+                    query = "INSERT INTO tareas (texto, proyecto, estado, nota, imagenes) VALUES (:texto, :proyecto, :estado, :nota, :imagenes)";
+                    params = {
+                        ":texto": tDatos.texto,
+                        ":proyecto": tDatos.proyecto,
+                        ":estado": tDatos.estado,
+                        ":nota": tDatos.nota,
+                        ":imagenes": JSON.stringify(tDatos.imagenes || [])
+                    };
+                }
+                const stmtIns = db.prepare(query);
+                stmtIns.run(params);
+                stmtIns.free();
+                
+                const newId = insertId || db.exec("SELECT last_insert_rowid()")[0].values[0][0];
+                KanbanDB.guardarSubtareas(db, newId, tDatos.subtareas);
+            });
+            
+            const todas = KanbanDB.obtenerTodas(db);
+            (datos.tareas || []).forEach(tDatos => {
+                const validReqs = (tDatos.requisito_ids || []).filter(reqId => todas.some(t => t.id === reqId));
+                KanbanDB.guardarRequisitos(db, tDatos.id, validReqs);
+            });
+        }
+
+        db.run("DELETE FROM papelera WHERE id = ?", [id]);
         KanbanDB.guardar(db, dbPath);
     }
 };

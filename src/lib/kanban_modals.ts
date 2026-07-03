@@ -769,10 +769,108 @@ class ProyectosGestionModal extends Modal {
     }
 }
 
+class PapeleraModal extends Modal {
+    constructor(app, db, dbPath, onSaved) {
+        super(app);
+        this.db = db;
+        this.dbPath = dbPath;
+        this.onSaved = onSaved;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.createEl("h2", {
+            text: "🗑️ Papelera de Reciclaje (30 días)",
+            style: "margin-top: 0; margin-bottom: 8px; color: var(--text-accent);"
+        });
+        contentEl.createEl("p", {
+            text: "Los elementos eliminados se conservan aquí por 30 días antes de ser purgados permanentemente.",
+            style: "color: var(--text-muted); font-size: 0.9em; margin: 0 0 20px 0;"
+        });
+
+        const listContainer = contentEl.createEl("div", {
+            style: "max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"
+        });
+
+        const renderList = () => {
+            listContainer.empty();
+            const registros = KanbanDB.obtenerPapelera(this.db);
+            if (registros.length === 0) {
+                listContainer.createEl("p", {
+                    text: "La papelera está vacía.",
+                    style: "color: var(--text-muted); font-style: italic; text-align: center; padding: 20px;"
+                });
+                return;
+            }
+
+            registros.forEach(r => {
+                const fila = listContainer.createEl("div", {
+                    style: "display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid var(--background-modifier-border); border-radius: 8px; background: var(--background-primary);"
+                });
+
+                const info = fila.createEl("div", { style: "display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; margin-right: 12px;" });
+                
+                const tipoLabel = r.tipo === "proyecto" ? "📁 Proyecto" : "🧪 Tarea";
+                const titulo = info.createEl("div", { style: "font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" });
+                titulo.textContent = `${tipoLabel}: ${r.nombreEntidad}`;
+
+                const fecha = info.createEl("small", {
+                    text: `Eliminado el: ${r.fecha}`,
+                    style: "color: var(--text-muted); font-size: 0.8em;"
+                });
+
+                const acciones = fila.createEl("div", { style: "display: flex; gap: 8px; flex-shrink: 0;" });
+                
+                const btnRestaurar = acciones.createEl("button", {
+                    text: "↩️ Restaurar",
+                    style: "font-size: 0.85em; padding: 4px 8px;"
+                });
+                btnRestaurar.onclick = () => {
+                    try {
+                        KanbanDB.restaurarPapelera(this.db, this.dbPath, r.id);
+                        new Notice(`↩️ Restaurado con éxito.`);
+                        this.onSaved();
+                        renderList();
+                    } catch (err) {
+                        console.error("Error restaurando:", err);
+                        new Notice("❌ Error al restaurar.");
+                    }
+                };
+
+                const btnBorrar = acciones.createEl("button", {
+                    text: "🗑️ Borrar permanentemente",
+                    style: "font-size: 0.85em; color: var(--text-error); border-color: var(--text-error); padding: 4px 8px;"
+                });
+                btnBorrar.onclick = () => {
+                    if (!confirm("¿Eliminar permanentemente de la papelera? Esta acción no se puede deshacer.")) return;
+                    try {
+                        KanbanDB.eliminarPapeleraPermanente(this.db, this.dbPath, r.id);
+                        new Notice("🗑️ Eliminado permanentemente.");
+                        renderList();
+                    } catch (err) {
+                        console.error("Error borrando:", err);
+                        new Notice("❌ Error al borrar.");
+                    }
+                };
+            });
+        };
+
+        renderList();
+
+        const accionesModal = contentEl.createEl("div", { cls: "kanban-formulario-acciones" });
+        accionesModal.createEl("button", { text: "Cerrar" }).onclick = () => this.close();
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
 export const KanbanModals = {
     TareaFormModal,
     TareaRequisitoSuggestModal,
     ProyectoSuggestModal,
     ProyectosGestionModal,
-    KanbanImagenSuggestModal
+    KanbanImagenSuggestModal,
+    PapeleraModal
 };

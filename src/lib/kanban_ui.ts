@@ -1900,6 +1900,16 @@ export const KanbanUI = {
         });
         accionesGrupo.appendChild(btnGestion);
 
+        const btnPapelera = document.createElement("button");
+        btnPapelera.className = "kanban-btn-gestion-proyectos";
+        btnPapelera.textContent = "🗑️ Papelera";
+        btnPapelera.title = "Historial de elementos eliminados (30 días)";
+        btnPapelera.addEventListener("click", () => {
+            if (!app) return;
+            new KanbanModals.PapeleraModal(app, db, dbPath, onRefresh).open();
+        });
+        accionesGrupo.appendChild(btnPapelera);
+
         const btnBuscar = document.createElement("button");
         btnBuscar.className = "kanban-btn-buscar";
         btnBuscar.textContent = "🔍 Buscar";
