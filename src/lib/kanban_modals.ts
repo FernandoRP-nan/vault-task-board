@@ -14,6 +14,8 @@ function ajustarAlturaTextarea(el) {
 function enlazarTextareaAuto(el) {
     el.addEventListener("input", () => ajustarAlturaTextarea(el));
     ajustarAlturaTextarea(el);
+    // Ejecutar en el siguiente ciclo por si el elemento aún no se ha añadido al DOM
+    setTimeout(() => ajustarAlturaTextarea(el), 0);
 }
 
 function crearTextareaSubtarea(valor = "") {
@@ -292,7 +294,7 @@ class TareaFormModal extends Modal {
         });
         contentEl.createEl("p", {
             cls: "kanban-modal-atajos",
-            text: "Atajos: Enter en título → proyecto · Enter en nueva subtarea → guardar · Ctrl+Enter guardar · Ctrl+Shift+Enter añadir subtarea"
+            text: "Atajos: Enter en título → proyecto · Enter en nueva subtarea → añadir · Ctrl+Enter guardar · Ctrl+Shift+Enter añadir subtarea"
         });
 
         const formDoble = contentEl.createEl("div", { cls: "kanban-form-doble" });
@@ -621,13 +623,7 @@ class TareaFormModal extends Modal {
             if (e.shiftKey) return;
             if (e.ctrlKey || e.metaKey) return;
             e.preventDefault();
-            const pendiente = inNuevaSub.value.trim();
-            if (pendiente) {
-                this.subtareas.push({ texto: pendiente, completado: false });
-                inNuevaSub.value = "";
-                ajustarAlturaTextarea(inNuevaSub);
-            }
-            guardarTarea();
+            agregarSub();
         });
 
         contentEl.addEventListener("keydown", (e) => {

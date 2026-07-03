@@ -189,6 +189,8 @@ class TaskBoardView extends ItemView {
 
             const ejecutar = async () => {
                 db = await KanbanDB.init(SQL, dbPath);
+                // Guardar la posición actual del scroll antes de vaciar el contenedor
+                const savedScrollTop = root.scrollTop;
                 root.empty();
                 await KanbanUI.renderDashboard(
                     root, db, dbPath, refrescarTrasMutacion,
@@ -199,6 +201,8 @@ class TaskBoardView extends ItemView {
                     this.mostrarCompletadas,
                     (v: boolean) => { this.mostrarCompletadas = v; void ejecutar(); }
                 );
+                // Restaurar la posición de scroll guardada
+                root.scrollTop = savedScrollTop;
                 if (this.uiAcciones) {
                     this.uiAcciones.db = db;
                     this.uiAcciones.proyectoFiltro = this.proyectoFiltro;

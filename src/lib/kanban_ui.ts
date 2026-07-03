@@ -860,6 +860,30 @@ export const KanbanUI = {
     _sanitizarMermaid: (texto) =>
         String(texto).replace(/["\[\]{}|#;]/g, " ").replace(/\n/g, " ").trim(),
 
+    _formatearTextoNodo: (texto, maxLineLen = 22, maxTotalLen = 50) => {
+        let res = String(texto).replace(/["\[\]{}|#;]/g, " ").replace(/\n/g, " ").trim();
+        if (res.length > maxTotalLen) {
+            res = res.slice(0, maxTotalLen) + "...";
+        }
+        const palabras = res.split(" ");
+        const lineas = [];
+        let lineaActual = "";
+        for (const pal of palabras) {
+            if (!lineaActual) {
+                lineaActual = pal;
+            } else if (lineaActual.length + 1 + pal.length <= maxLineLen) {
+                lineaActual += " " + pal;
+            } else {
+                lineas.push(lineaActual);
+                lineaActual = pal;
+            }
+        }
+        if (lineaActual) {
+            lineas.push(lineaActual);
+        }
+        return lineas.join("<br/>");
+    },
+
     _PALETA_PROYECTO: [
         { bg: "rgba(45, 55, 72, 0.55)", border: "#4a5568", kanban: "rgba(45, 55, 72, 0.35)" },
         { bg: "rgba(44, 82, 130, 0.45)", border: "#2b6cb0", kanban: "rgba(44, 82, 130, 0.28)" },
@@ -1065,7 +1089,9 @@ export const KanbanUI = {
             const textos = svg.querySelectorAll("text, foreignObject p, foreignObject span, .nodeLabel");
             for (const txt of textos) {
                 const contenido = (txt.textContent || "").trim().toLowerCase();
-                if (contenido !== objetivo) continue;
+                const contLimpio = contenido.replace(/\s+/g, "").replace(/\.\.\./g, "");
+                const objLimpio = objetivo.replace(/\s+/g, "").replace(/\.\.\./g, "");
+                if (contLimpio !== objLimpio && !objLimpio.startsWith(contLimpio) && !contLimpio.startsWith(objLimpio)) continue;
                 const nodo = txt.closest("g.node") || txt.closest("g[class*='node']") || txt.closest("g[id]");
                 if (!nodo) continue;
                 nodo.dataset.tareaId = String(t.id);
@@ -1127,7 +1153,7 @@ export const KanbanUI = {
 
     _enlazarClicksMermaidDom: (hostEl, tareas, db, dbPath, onRefresh) => {
         KanbanUI._etiquetarNodosMermaid(hostEl, tareas);
-        return KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath, onRefresh);
+        return KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath, onRefresh, tareas);
     },
 
     // Elige el overlay cuyo centro está más cerca del puntero (evita tomar el último del DOM)
@@ -1162,7 +1188,7 @@ export const KanbanUI = {
             || svg.querySelector(`[data-tarea-id="${tareaId}"]`);
     },
 
-    _enlazarInteraccionOverlaysMermaid: (hostEl, db, dbPath, onRefresh) => {
+    _enlazarInteraccionOverlaysMermaid: (hostEl, db, dbPath, onRefresh, tareas = []) => {
         const svg = hostEl.querySelector("svg");
         if (!svg) return null;
 
@@ -1253,7 +1279,9 @@ export const KanbanUI = {
                 const ov = document.createElement("div");
                 ov.className = "kanban-mermaid-overlay";
                 ov.dataset.tareaId = tareaId;
-                ov.title = nodo.querySelector("text")?.textContent?.trim() || "";
+                const idNum = parseInt(tareaId, 10);
+                const tarea = (tareas || []).find(t => t.id === idNum);
+                ov.title = tarea ? tarea.texto : (nodo.querySelector("text")?.textContent?.trim() || "");
                 ov.style.left = `${(rect.left - hostRect.left) / zoom}px`;
                 ov.style.top = `${(rect.top - hostRect.top) / zoom}px`;
                 ov.style.width = `${rect.width / zoom}px`;
@@ -1396,7 +1424,7 @@ export const KanbanUI = {
 
     _construirMermaid: (tareas, agruparPorProyecto = false) => {
         const mapa = new Map(tareas.map(t => [t.id, t]));
-        let codigo = "graph LR\n";
+        let codigo = "flowchart TD\n";
         codigo += "  classDef bloqueada fill:#1a2332,stroke:#718096,color:#cbd5e1,stroke-width:2px\n";
         codigo += "  classDef porHacer fill:#334155,stroke:#94a3b8,color:#f8fafc,stroke-width:2px\n";
         codigo += "  classDef enProceso fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px\n";
@@ -1404,7 +1432,7 @@ export const KanbanUI = {
 
         const clases = [];
         const emitirNodo = (t, indent = "  ") => {
-            const label = KanbanUI._sanitizarMermaid(t.texto);
+            const label = KanbanUI._formatearTextoNodo(t.texto);
             // Forma stadium (pastilla) para aspecto de chip
             codigo += `${indent}T${t.id}(["${label}"])\n`;
         };
