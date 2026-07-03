@@ -15,6 +15,7 @@ let kanbanUiApp = null;
 export const KanbanUI = {
     ESTADOS: ["Por Hacer", "En Proceso", "Terminado"],
     MIME_TAREA_DRAG: "application/x-kanban-tarea-id",
+    proyectosFiltrados: new Set(),
 
     configure: (app) => {
         kanbanUiApp = app;
@@ -414,6 +415,63 @@ export const KanbanUI = {
                 border: 1px solid var(--background-modifier-border);
                 border-radius: 10px;
                 padding: 16px 20px;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            }
+            .kanban-proyectos-cards-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 16px;
+                margin-bottom: 24px;
+                width: 100%;
+            }
+            .kanban-proyecto-card {
+                background: var(--background-primary);
+                border: 2px solid var(--background-modifier-border);
+                border-radius: 8px;
+                padding: 16px;
+                cursor: pointer;
+                transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .kanban-proyecto-card:hover {
+                border-color: var(--text-muted);
+                transform: translateY(-2px);
+            }
+            .kanban-proyecto-card.kanban-proyecto-card--seleccionado {
+                border-color: var(--interactive-accent);
+                box-shadow: 0 0 8px rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.3);
+            }
+            .kanban-proyecto-card-titulo {
+                font-weight: 700;
+                font-size: 1.1em;
+                margin: 0;
+                color: var(--text-normal);
+            }
+            .kanban-proyecto-card-info {
+                font-size: 0.85em;
+                color: var(--text-muted);
+            }
+            .kanban-proyecto-card-btn {
+                align-self: flex-start;
+                background: var(--background-secondary);
+                border: 1px solid var(--background-modifier-border);
+                color: var(--text-normal);
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 0.85em;
+                font-weight: 600;
+                cursor: pointer;
+                transition: border-color 0.2s, color 0.2s;
+            }
+            .kanban-proyecto-card-btn:hover {
+                border-color: var(--interactive-accent);
+                color: var(--interactive-accent);
             }
             .kanban-filtro-grupo {
                 display: flex;
@@ -2012,6 +2070,74 @@ export const KanbanUI = {
         contenedor.appendChild(seccion);
     },
 
+    _renderMenuProyectos: (contenedor, db, onRefresh, setProyectoFiltro) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "kanban-seccion-proyectos-menu";
+        
+        const titulo = document.createElement("h3");
+        titulo.textContent = "📁 Proyectos Activos";
+        titulo.style.color = "var(--text-accent)";
+        titulo.style.marginBottom = "14px";
+        wrapper.appendChild(titulo);
+
+        const grid = document.createElement("div");
+        grid.className = "kanban-proyectos-cards-container";
+
+        const proyectos = KanbanDB.obtenerProyectos(db).filter(p => !p.archivado);
+        if (proyectos.length === 0) {
+            const vacio = document.createElement("p");
+            vacio.className = "kanban-vacio";
+            vacio.textContent = "No hay proyectos activos.";
+            grid.appendChild(vacio);
+        } else {
+            proyectos.forEach(p => {
+                const card = document.createElement("div");
+                card.className = "kanban-proyecto-card";
+                if (KanbanUI.proyectosFiltrados.has(p.nombre)) {
+                    card.classList.add("kanban-proyecto-card--seleccionado");
+                }
+
+                // Alternar el filtro al hacer clic en la tarjeta
+                card.addEventListener("click", (e) => {
+                    if (e.target.closest(".kanban-proyecto-card-btn")) return;
+                    
+                    if (KanbanUI.proyectosFiltrados.has(p.nombre)) {
+                        KanbanUI.proyectosFiltrados.delete(p.nombre);
+                    } else {
+                        KanbanUI.proyectosFiltrados.add(p.nombre);
+                    }
+                    void onRefresh?.();
+                });
+
+                const nombre = document.createElement("h4");
+                nombre.className = "kanban-proyecto-card-titulo";
+                nombre.textContent = `📁 ${p.nombre}`;
+
+                const info = document.createElement("span");
+                info.className = "kanban-proyecto-card-info";
+                const tareasTxt = p.total === 1 ? "1 tarea activa" : `${p.total} tareas activas`;
+                info.textContent = tareasTxt;
+
+                const btnIr = document.createElement("button");
+                btnIr.type = "button";
+                btnIr.className = "kanban-proyecto-card-btn";
+                btnIr.textContent = "Ver detalles 🔬";
+                btnIr.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    setProyectoFiltro(p.nombre);
+                });
+
+                card.appendChild(nombre);
+                card.appendChild(info);
+                card.appendChild(btnIr);
+                grid.appendChild(card);
+            });
+        }
+
+        wrapper.appendChild(grid);
+        contenedor.appendChild(wrapper);
+    },
+
     renderDashboard: async (mainContainer, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas) => {
         while (mainContainer.firstChild) {
             mainContainer.removeChild(mainContainer.firstChild);
@@ -2034,17 +2160,32 @@ export const KanbanUI = {
             return;
         }
 
+        if (proyectoFiltro) {
+            KanbanUI.proyectosFiltrados.clear();
+        }
+
         const tareasBase = proyectoFiltro
             ? tareasTodas.filter(t => t.proyecto === proyectoFiltro)
             : tareasTodas;
 
-        const numCompletadas = tareasBase.filter(t => t.estado === "Terminado").length;
+        let tareasFiltradasGeneral = tareasBase;
+        if (!proyectoFiltro && KanbanUI.proyectosFiltrados.size > 0) {
+            tareasFiltradasGeneral = tareasBase.filter(t => KanbanUI.proyectosFiltrados.has(t.proyecto));
+        }
+
+        const numCompletadas = tareasFiltradasGeneral.filter(t => t.estado === "Terminado").length;
         const tareas = mostrarCompletadas
-            ? tareasBase
-            : tareasBase.filter(t => t.estado !== "Terminado");
+            ? tareasFiltradasGeneral
+            : tareasFiltradasGeneral.filter(t => t.estado !== "Terminado");
 
         KanbanUI._renderPanelSuperior(layout, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro);
-        await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath, onRefresh);
+        
+        if (proyectoFiltro) {
+            await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath, onRefresh);
+        } else {
+            KanbanUI._renderMenuProyectos(layout, db, onRefresh, setProyectoFiltro);
+        }
+
         KanbanUI._renderKanban(
             layout, tareas, db, dbPath, onRefresh, proyectoFiltro,
             mostrarBloqueadas, setMostrarBloqueadas,
