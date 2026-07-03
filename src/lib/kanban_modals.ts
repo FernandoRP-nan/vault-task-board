@@ -701,6 +701,33 @@ class ProyectosGestionModal extends Modal {
                     new Notice(`❌ No se pudo ${verbo} el proyecto.`);
                 }
             };
+
+            const btnEliminar = fila.createEl("button", {
+                text: "🗑️ Borrar",
+                style: "color: var(--text-error); border-color: var(--text-error); margin-left: 8px;"
+            });
+            btnEliminar.onclick = () => {
+                let mensaje = `¿Eliminar permanentemente el proyecto "${p.nombre}" y TODAS sus tareas asociadas?\nEsta acción no se puede deshacer.`;
+                if (p.total > 0) {
+                    mensaje += `\n\nSe eliminarán ${p.total} tarea(s).`;
+                }
+                if (!confirm(mensaje)) return;
+
+                try {
+                    KanbanDB.eliminarProyecto(this.db, this.dbPath, p.nombre);
+                    if (this.proyectoFiltro === p.nombre) {
+                        this.proyectoFiltro = "";
+                        this.setProyectoFiltro("");
+                    }
+                    new Notice(`🗑️ Proyecto "${p.nombre}" y sus tareas eliminados.`);
+                    this.onSaved();
+                    this.contentEl.empty();
+                    this.onOpen();
+                } catch (err) {
+                    console.error("Error al eliminar proyecto:", err);
+                    new Notice("❌ No se pudo eliminar el proyecto.");
+                }
+            };
         });
     }
 

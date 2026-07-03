@@ -412,5 +412,11 @@ export const KanbanDB = {
         KanbanDB._sincronizarProyectosDesdeTareas(db);
         KanbanDB._registrarProyecto(db, nombre, 0);
         KanbanDB.guardar(db, dbPath);
+    },
+
+    eliminarProyecto: (db, dbPath, nombre) => {
+        db.run("DELETE FROM tareas WHERE proyecto = ?", [nombre]);
+        db.run("DELETE FROM proyectos WHERE nombre = ?", [nombre]);
+        KanbanDB.guardar(db, dbPath);
     }
 };
