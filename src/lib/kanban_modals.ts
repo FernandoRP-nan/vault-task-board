@@ -1,6 +1,7 @@
 /* kanban_modals.ts — migrado a módulo TS */
 // @ts-nocheck
 import { KanbanDB } from "./kanban_db";
+import { KanbanNotes } from "./kanban_notes";
 import { Modal, Setting, SuggestModal, Notice } from "obsidian";
 
 // kanban_modals.js - Modales nativos para crear y editar tareas
@@ -443,6 +444,57 @@ class TareaFormModal extends Modal {
                 const txt = crearTextareaSubtarea(st.texto);
                 txt.oninput = () => { st.texto = txt.value; };
                 fila.appendChild(txt);
+                const btnConvertir = fila.createEl("button", {
+                    text: "⇢",
+                    cls: "kanban-subtarea-convertir",
+                    attr: { title: "Convertir en tarea y elegir prerequisito o postrequisito" }
+                });
+                btnConvertir.onclick = async (e) => {
+                    e.preventDefault();
+                    if (!esEdicion) {
+                        new Notice("⚠️ Guarda la tarea antes de convertir subtareas.");
+                        return;
+                    }
+                    const textoSub = st.texto.trim();
+                    if (!textoSub) {
+                        new Notice("⚠️ La subtarea está vacía.");
+                        return;
+                    }
+                    const tituloPadre = inTexto.value.trim() || this.datos.texto;
+                    const tipoVinculo = await KanbanModals.elegirVinculoSubtarea(this.app, textoSub, tituloPadre);
+                    if (!tipoVinculo) return;
+                    try {
+                        KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, {
+                            texto: inTexto.value.trim(),
+                            proyecto: inProyecto.value.trim(),
+                            estado: inEstado.value,
+                            nota: inNota.value.trim(),
+                            imagenes: [...this.imagenes],
+                            subtareas: this.subtareas
+                                .map(s => ({ texto: s.texto.trim(), completado: !!s.completado }))
+                                .filter(s => s.texto),
+                            requisito_ids: [...this.requisitosSeleccionados]
+                        });
+                        const nuevaId = KanbanDB.convertirSubtareaATarea(
+                            this.db, this.dbPath, this.datos.id, idx, tipoVinculo
+                        );
+                        const etiqueta = KanbanModals.etiquetaVinculoSubtarea(tipoVinculo);
+                        new Notice(`✅ Tarea #${nuevaId} creada como ${etiqueta}.`);
+                        this.subtareas.splice(idx, 1);
+                        if (tipoVinculo === "prerequisito") {
+                            const padre = KanbanDB.obtenerTodas(this.db).find(t => t.id === this.datos.id);
+                            if (padre) {
+                                this.requisitosSeleccionados = [...(padre.requisito_ids || [])];
+                                renderChips();
+                            }
+                        }
+                        renderSubtareas();
+                        this.onSaved?.();
+                    } catch (err) {
+                        console.error("Error convirtiendo subtarea:", err);
+                        new Notice(`❌ ${err?.message || "No se pudo convertir la subtarea."}`);
+                    }
+                };
                 fila.createEl("button", { text: "✕", cls: "kanban-subtarea-quitar" }).onclick = (e) => {
                     e.preventDefault();
                     this.subtareas.splice(idx, 1);
@@ -466,6 +518,19 @@ class TareaFormModal extends Modal {
             agregarSub();
         };
 
+        const btnNotaDerivada = subAcciones.createEl("button", {
+            text: "📄 Convertir a nota",
+            attr: { title: "Crea una nota .md en la bóveda y la vincula en la nota interna" }
+        });
+        const btnSubtareasATareas = subAcciones.createEl("button", {
+            text: "⇢ Todas a tareas",
+            attr: { title: "Convierte cada subtarea en tarea real; eliges prerequisito o postrequisito" }
+        });
+        const actualizarBtnNotaDerivada = () => {
+            const ruta = KanbanDB.extraerRutaNotaChecklist(inNota?.value || this.datos?.nota);
+            btnNotaDerivada.textContent = ruta ? "📄 Abrir nota derivada" : "📄 Convertir a nota";
+        };
+
         const notaWrap = colDer.createEl("div", { cls: "kanban-campo kanban-campo-nota" });
         notaWrap.createEl("label", { text: "Nota interna:" });
         const inNota = notaWrap.createEl("textarea", {
@@ -473,6 +538,7 @@ class TareaFormModal extends Modal {
             cls: "kanban-input-nota kanban-input-nota-amplia"
         });
         if (esEdicion && this.datos.nota) inNota.value = this.datos.nota;
+        actualizarBtnNotaDerivada();
 
         const imgWrap = colDer.createEl("div", { cls: "kanban-campo" });
         imgWrap.createEl("label", { text: "Imágenes adjuntas:" });
@@ -617,6 +683,142 @@ class TareaFormModal extends Modal {
         };
 
         btnGuardar.onclick = () => guardarTarea();
+
+        btnSubtareasATareas.onclick = async (e) => {
+            e.preventDefault();
+            if (!esEdicion) {
+                new Notice("⚠️ Guarda la tarea antes de convertir subtareas.");
+                return;
+            }
+            const subs = this.subtareas.filter(st => st.texto.trim());
+            if (!subs.length) {
+                new Notice("⚠️ No hay subtareas para convertir.");
+                return;
+            }
+            const titulo = inTexto.value.trim() || this.datos.texto;
+            const tipoVinculo = await KanbanModals.elegirVinculoSubtarea(
+                this.app, `${subs.length} subtarea(s)`, titulo
+            );
+            if (!tipoVinculo) return;
+            try {
+                KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, {
+                    texto: inTexto.value.trim(),
+                    proyecto: inProyecto.value.trim(),
+                    estado: inEstado.value,
+                    nota: inNota.value.trim(),
+                    imagenes: [...this.imagenes],
+                    subtareas: subs.map(s => ({ texto: s.texto.trim(), completado: !!s.completado })),
+                    requisito_ids: [...this.requisitosSeleccionados]
+                });
+                const ids = KanbanDB.convertirTodasSubtareasATareas(
+                    this.db, this.dbPath, this.datos.id, tipoVinculo
+                );
+                const etiqueta = KanbanModals.etiquetaVinculoSubtarea(tipoVinculo);
+                new Notice(`✅ ${ids.length} tarea(s) creadas como ${etiqueta}s.`);
+                this.subtareas = [];
+                if (tipoVinculo === "prerequisito") {
+                    const padre = KanbanDB.obtenerTodas(this.db).find(t => t.id === this.datos.id);
+                    if (padre) {
+                        this.requisitosSeleccionados = [...(padre.requisito_ids || [])];
+                        renderChips();
+                    }
+                }
+                renderSubtareas();
+                this.onSaved?.();
+            } catch (err) {
+                console.error("Error convirtiendo subtareas:", err);
+                new Notice(`❌ ${err?.message || "No se pudieron convertir las subtareas."}`);
+            }
+        };
+
+        btnNotaDerivada.onclick = async (e) => {
+            e.preventDefault();
+            const texto = inTexto.value.trim();
+            const proyecto = inProyecto.value.trim();
+            const estado = inEstado.value;
+            const subs = this.subtareas
+                .map(st => ({ texto: st.texto.trim(), completado: !!st.completado }))
+                .filter(st => st.texto);
+
+            if (!texto || !proyecto) {
+                new Notice("⚠️ Texto y proyecto son obligatorios.");
+                return;
+            }
+            if (!esEdicion) {
+                new Notice("⚠️ Guarda la tarea antes de convertir la checklist a nota.");
+                return;
+            }
+
+            const rutaExistente = KanbanDB.extraerRutaNotaChecklist(inNota.value)
+                || KanbanDB.extraerRutaNotaChecklist(this.datos.nota);
+
+            if (rutaExistente && this.app.vault.getAbstractFileByPath(rutaExistente)) {
+                if (subs.length) {
+                    await KanbanNotes.sincronizarNota(
+                        this.app, rutaExistente,
+                        { id: this.datos.id, texto, proyecto },
+                        subs
+                    );
+                }
+                await KanbanNotes.abrirNota(this.app, rutaExistente);
+                return;
+            }
+            if (rutaExistente) {
+                if (!subs.length) {
+                    new Notice("⚠️ La nota se perdió en la bóveda. Añade subtareas para recrearla.");
+                    return;
+                }
+                if (!confirm("La nota derivada no existe en la bóveda. ¿Recrearla desde la checklist actual?")) {
+                    return;
+                }
+            } else if (!subs.length) {
+                new Notice("⚠️ Añade al menos una subtarea en la checklist.");
+                return;
+            }
+
+            try {
+                this._compactarRequisitosSeleccionados();
+                const payloadBase = {
+                    texto,
+                    proyecto,
+                    estado,
+                    imagenes: [...this.imagenes],
+                    requisito_ids: [...this.requisitosSeleccionados]
+                };
+                KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, {
+                    ...payloadBase,
+                    nota: inNota.value.trim(),
+                    subtareas: subs
+                });
+
+                const ruta = await KanbanNotes.crearNotaDerivada(
+                    this.app,
+                    { id: this.datos.id, texto, proyecto },
+                    subs
+                );
+                const nuevaNota = KanbanDB._notaConVinculoChecklist(inNota.value, ruta, texto);
+                KanbanDB.actualizarTarea(this.db, this.dbPath, this.datos.id, {
+                    ...payloadBase,
+                    nota: nuevaNota,
+                    subtareas: []
+                });
+
+                inNota.value = nuevaNota;
+                this.subtareas = [];
+                renderSubtareas();
+                actualizarBtnNotaDerivada();
+                new Notice(`📄 Nota derivada creada y anexada a la tarea.`);
+                await KanbanNotes.abrirNota(this.app, ruta);
+                try {
+                    this.onSaved?.();
+                } catch (refreshErr) {
+                    console.error("Error refrescando tablero:", refreshErr);
+                }
+            } catch (err) {
+                console.error("Error convirtiendo checklist a nota:", err);
+                new Notice(`❌ ${err?.message || "No se pudo crear la nota derivada."}`);
+            }
+        };
 
         inNuevaSub.addEventListener("keydown", (e) => {
             if (e.key !== "Enter") return;
@@ -866,11 +1068,92 @@ class PapeleraModal extends Modal {
     }
 }
 
+/** Modal para elegir si la tarea convertida es prerequisito o postrequisito de la origen. */
+class VinculoSubtareaModal extends Modal {
+    constructor(app, textoSub, textoPadre, onElegir, onCancel) {
+        super(app);
+        this.textoSub = textoSub;
+        this.textoPadre = textoPadre;
+        this.onElegir = onElegir;
+        this.onCancel = onCancel;
+        this._resuelto = false;
+    }
+
+    _cerrarCon(tipo) {
+        this._resuelto = true;
+        if (tipo) this.onElegir(tipo);
+        else this.onCancel?.();
+        this.close();
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.addClass("kanban-modal-vinculo-subtarea");
+        contentEl.createEl("h2", { text: "⇢ Vincular tarea convertida", cls: "kanban-modal-tarea-titulo" });
+        contentEl.createEl("p", {
+            text: `«${this.textoSub}» pasará a ser tarea del organizador, derivada de «${this.textoPadre}».`,
+            style: "color: var(--text-muted); margin: 0 0 16px 0;"
+        });
+
+        const mkOpcion = (tipo, titulo, desc, ejemplo) => {
+            const bloque = contentEl.createEl("div", {
+                cls: "kanban-vinculo-opcion",
+                style: "border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 12px; margin-bottom: 10px;"
+            });
+            bloque.createEl("strong", { text: titulo });
+            bloque.createEl("p", { text: desc, style: "margin: 6px 0 4px 0; color: var(--text-muted); font-size: 0.9em;" });
+            bloque.createEl("small", { text: ejemplo, style: "color: var(--text-faint);" });
+            bloque.createEl("button", { text: "Elegir", style: "margin-top: 8px;" }).onclick = (e) => {
+                e.preventDefault();
+                this._cerrarCon(tipo);
+            };
+        };
+
+        mkOpcion(
+            "prerequisito",
+            "Prerequisito",
+            "La nueva tarea debe completarse antes de poder avanzar la tarea origen.",
+            `Diagrama: [${this.textoSub}] → [${this.textoPadre}]`
+        );
+        mkOpcion(
+            "postrequisito",
+            "Postrequisito",
+            "La tarea origen debe completarse antes de poder avanzar la nueva tarea.",
+            `Diagrama: [${this.textoPadre}] → [${this.textoSub}]`
+        );
+
+        contentEl.createEl("button", { text: "Cancelar", style: "margin-top: 8px;" }).onclick = (e) => {
+            e.preventDefault();
+            this._cerrarCon(null);
+        };
+    }
+
+    onClose() {
+        if (!this._resuelto) this.onCancel?.();
+        this.contentEl.empty();
+    }
+}
+
+function elegirVinculoSubtarea(app, textoSub, textoPadre) {
+    return new Promise((resolve) => {
+        new VinculoSubtareaModal(app, textoSub, textoPadre,
+            (tipo) => resolve(tipo),
+            () => resolve(null)
+        ).open();
+    });
+}
+
+function etiquetaVinculoSubtarea(tipo) {
+    return tipo === "postrequisito" ? "postrequisito" : "prerequisito";
+}
+
 export const KanbanModals = {
     TareaFormModal,
     TareaRequisitoSuggestModal,
     ProyectoSuggestModal,
     ProyectosGestionModal,
     KanbanImagenSuggestModal,
-    PapeleraModal
+    PapeleraModal,
+    elegirVinculoSubtarea,
+    etiquetaVinculoSubtarea
 };

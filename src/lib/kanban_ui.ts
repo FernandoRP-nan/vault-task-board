@@ -789,6 +789,7 @@ export const KanbanUI = {
             }
             .kanban-chip-quitar,
             .kanban-subtarea-quitar,
+            .kanban-subtarea-convertir,
             .kanban-imagen-quitar {
                 border: none;
                 background: none;
@@ -1230,6 +1231,28 @@ export const KanbanUI = {
         ).open();
     },
 
+    _convertirSubtareaDiagrama: async (db, dbPath, tareaId, subIdx, onRefresh) => {
+        const padre = KanbanDB.obtenerTodas(db).find(t => t.id === tareaId);
+        const sub = padre?.subtareas?.[subIdx];
+        if (!padre || !sub) return;
+
+        const app = KanbanUI._getApp();
+        if (!app) return;
+
+        const tipoVinculo = await KanbanModals.elegirVinculoSubtarea(app, sub.texto, padre.texto);
+        if (!tipoVinculo) return;
+
+        try {
+            const nuevaId = KanbanDB.convertirSubtareaATarea(db, dbPath, tareaId, subIdx, tipoVinculo);
+            const etiqueta = KanbanModals.etiquetaVinculoSubtarea(tipoVinculo);
+            new Notice(`✅ Tarea #${nuevaId} creada como ${etiqueta}.`);
+            await onRefresh?.();
+        } catch (err) {
+            console.error("Error convirtiendo subtarea:", err);
+            new Notice(`❌ ${err?.message || "No se pudo convertir la subtarea."}`);
+        }
+    },
+
     _enlazarClicksMermaidDom: (hostEl, tareas, db, dbPath, onRefresh) => {
         KanbanUI._etiquetarNodosMermaid(hostEl, tareas);
         return KanbanUI._enlazarInteraccionOverlaysMermaid(hostEl, db, dbPath, onRefresh, tareas);
@@ -1376,7 +1399,7 @@ export const KanbanUI = {
                 } else {
                     tooltipText = nodo.querySelector("text")?.textContent?.trim() || "";
                 }
-                ov.title = tooltipText;
+                ov.title = tooltipText + (subIdxAttr !== undefined ? " · Clic: convertir en tarea (elegir vínculo)" : "");
                 ov.style.left = `${(rect.left - hostRect.left) / zoom}px`;
                 ov.style.top = `${(rect.top - hostRect.top) / zoom}px`;
                 ov.style.width = `${rect.width / zoom}px`;
@@ -1418,7 +1441,14 @@ export const KanbanUI = {
                     await aplicarRequisito(tareaId, destinoId);
                 }
             } else if (fueClick) {
-                KanbanUI._abrirEdicionTarea(db, dbPath, tareaId, onRefresh);
+                const subIdxAttr = overlay.dataset.subtareaIdx;
+                if (subIdxAttr !== undefined) {
+                    await KanbanUI._convertirSubtareaDiagrama(
+                        db, dbPath, tareaId, parseInt(subIdxAttr, 10), onRefresh
+                    );
+                } else {
+                    KanbanUI._abrirEdicionTarea(db, dbPath, tareaId, onRefresh);
+                }
             }
 
             limpiarDestino();
@@ -1774,7 +1804,7 @@ export const KanbanUI = {
             card.appendChild(meta);
         }
 
-        const notaTxt = (tarea.nota || "").trim();
+        const notaTxt = KanbanDB.limpiarNotaParaVista(tarea.nota);
         if (notaTxt) {
             const notaEl = document.createElement("div");
             notaEl.className = "kanban-tarjeta-nota";
@@ -1786,6 +1816,7 @@ export const KanbanUI = {
 
         const subs = tarea.subtareas || [];
         const imgs = tarea.imagenes || [];
+        const rutaNotaDerivada = KanbanDB.extraerRutaNotaChecklist(tarea.nota);
         if (subs.length > 0) {
             const hechas = subs.filter(s => s.completado).length;
             const pct = Math.round((hechas / subs.length) * 100);
@@ -1798,7 +1829,7 @@ export const KanbanUI = {
             barra.appendChild(fill);
             card.appendChild(barra);
         }
-        if (subs.length > 0 || imgs.length > 0) {
+        if (subs.length > 0 || imgs.length > 0 || rutaNotaDerivada) {
             const ind = document.createElement("div");
             ind.className = "kanban-tarjeta-indicadores";
             if (subs.length > 0) {
@@ -1807,6 +1838,13 @@ export const KanbanUI = {
                 badge.className = "kanban-tarjeta-badge";
                 badge.textContent = `☑ ${hechas}/${subs.length}`;
                 badge.title = "Subtareas completadas";
+                ind.appendChild(badge);
+            }
+            if (rutaNotaDerivada) {
+                const badge = document.createElement("span");
+                badge.className = "kanban-tarjeta-badge";
+                badge.textContent = "📋 Nota";
+                badge.title = `Checklist en nota: ${rutaNotaDerivada}`;
                 ind.appendChild(badge);
             }
             if (imgs.length > 0) {

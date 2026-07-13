@@ -70,6 +70,29 @@ export const KanbanDB = {
 
     _marcaAgenda: (agendaId) => `<!-- agenda:${agendaId} -->`,
 
+    _marcaChecklistNote: (ruta) => `<!-- checklist-note:${ruta} -->`,
+
+    extraerRutaNotaChecklist: (nota) => {
+        const m = String(nota || "").match(/<!--\s*checklist-note:([^>]+)\s*-->/);
+        return m ? m[1].trim() : "";
+    },
+
+    limpiarNotaParaVista: (nota) => String(nota || "")
+        .replace(/\n?<!--\s*checklist-note:[^>]+-->/g, "")
+        .replace(/\n?<!--\s*agenda:[^>]+-->/g, "")
+        .trim(),
+
+    _notaConVinculoChecklist: (notaActual, rutaNota, tituloTarea) => {
+        if (KanbanDB.extraerRutaNotaChecklist(notaActual) === rutaNota) return notaActual;
+        const limpia = KanbanDB.limpiarNotaParaVista(notaActual)
+            .replace(/\n?\[\[[^\]]+\|📋 Checklist:[^\]]+\]\]/g, "")
+            .trim();
+        const linkName = rutaNota.replace(/\.md$/i, "");
+        const wikilink = `[[${linkName}|📋 Checklist: ${tituloTarea}]]`;
+        const marca = KanbanDB._marcaChecklistNote(rutaNota);
+        return limpia ? `${limpia}\n\n${wikilink}\n${marca}` : `${wikilink}\n${marca}`;
+    },
+
     _notaConMarcaAgenda: (notas, agendaId) => {
         const marca = KanbanDB._marcaAgenda(agendaId);
         const limpia = String(notas || "").replace(/\n?<!-- agenda:[^>]+ -->/g, "").trim();
@@ -136,6 +159,70 @@ export const KanbanDB = {
             stmt.run([tareaId, texto, st.completado ? 1 : 0, idx]);
         });
         stmt.free();
+    },
+
+    _marcaDerivadaChecklist: (tareaPadreId) => `<!-- organizador-derivada:${tareaPadreId} -->`,
+
+    // Convierte una subtarea de checklist en tarea real; tipoVinculo: prerequisito | postrequisito
+    convertirSubtareaATarea: (db, dbPath, tareaPadreId, indiceSubtarea, tipoVinculo = "prerequisito") => {
+        if (!["prerequisito", "postrequisito"].includes(tipoVinculo)) {
+            throw new Error("Tipo de vínculo no válido");
+        }
+
+        const todas = KanbanDB.obtenerTodas(db);
+        const padre = todas.find(t => t.id === tareaPadreId);
+        if (!padre) throw new Error("Tarea no encontrada");
+
+        const subtareas = [...(padre.subtareas || [])];
+        const st = subtareas[indiceSubtarea];
+        if (!st) throw new Error("Subtarea no encontrada");
+
+        const texto = String(st.texto || "").trim();
+        if (!texto) throw new Error("La subtarea está vacía");
+
+        const marca = KanbanDB._marcaDerivadaChecklist(tareaPadreId);
+        const nuevaId = KanbanDB.crearTarea(db, dbPath, {
+            texto,
+            proyecto: padre.proyecto,
+            estado: st.completado ? "Terminado" : "Por Hacer",
+            nota: `Derivada de checklist de «${padre.texto}».\n${marca}`,
+            imagenes: [],
+            subtareas: [],
+            requisito_ids: tipoVinculo === "postrequisito" ? [tareaPadreId] : []
+        });
+
+        subtareas.splice(indiceSubtarea, 1);
+
+        let reqsPadre = [...(padre.requisito_ids || [])];
+        if (tipoVinculo === "prerequisito") reqsPadre.push(nuevaId);
+
+        const mapa = new Map(KanbanDB.obtenerTodas(db).map(t => [t.id, t]));
+        const reqsCompactos = KanbanDB._filtrarRequisitosSinAncestros(reqsPadre, mapa);
+
+        KanbanDB.actualizarTarea(db, dbPath, tareaPadreId, {
+            texto: padre.texto,
+            proyecto: padre.proyecto,
+            estado: padre.estado,
+            nota: padre.nota,
+            imagenes: padre.imagenes || [],
+            subtareas,
+            requisito_ids: reqsCompactos
+        });
+
+        return nuevaId;
+    },
+
+    convertirTodasSubtareasATareas: (db, dbPath, tareaPadreId, tipoVinculo = "prerequisito") => {
+        const padre = KanbanDB.obtenerTodas(db).find(t => t.id === tareaPadreId);
+        if (!padre) throw new Error("Tarea no encontrada");
+        const total = (padre.subtareas || []).length;
+        if (!total) throw new Error("No hay subtareas para convertir");
+
+        const ids = [];
+        for (let i = total - 1; i >= 0; i--) {
+            ids.unshift(KanbanDB.convertirSubtareaATarea(db, dbPath, tareaPadreId, i, tipoVinculo));
+        }
+        return ids;
     },
 
     guardar: (db, dbPath) => ScriptsRuntime.guardarDb(db, dbPath),
