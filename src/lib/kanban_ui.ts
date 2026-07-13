@@ -4,6 +4,7 @@ import { KanbanDB } from "./kanban_db";
 import { KanbanModals } from "./kanban_modals";
 import { KanbanPrefs } from "./kanban_prefs";
 import { DiagramaExpandidoModal } from "./kanban_diagram_modal";
+import { DiagramLayout, DiagramaLayoutModal } from "./kanban_diagram_layout";
 import { abrirBusquedaTareas } from "./kanban_search";
 import { montarStageDiagrama, inicializarViewportDiagrama } from "./kanban_diagram_viewport";
 import { Modal, Setting, SuggestModal, Notice } from "obsidian";
@@ -68,6 +69,12 @@ export const KanbanUI = {
                 border: 1px solid var(--background-modifier-border);
                 border-radius: 10px;
                 padding: 20px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .kanban-mapa-cuerpo {
+                width: 100%;
+                box-sizing: border-box;
             }
             .kanban-seccion-mapa h3 {
                 margin: 0 0 16px 0;
@@ -78,6 +85,86 @@ export const KanbanUI = {
                 flex-direction: column;
                 gap: 12px;
                 min-height: 120px;
+            }
+            .kanban-mermaid-contenedor.kanban-mermaid-dist--grid {
+                display: grid;
+                width: 100%;
+                box-sizing: border-box;
+                justify-items: stretch;
+                align-items: stretch;
+                gap: 12px;
+            }
+            .kanban-mermaid-dist--grid > .kanban-mapa-proyecto {
+                width: 100%;
+                min-width: 0;
+                max-width: none;
+                margin-bottom: 0;
+                box-sizing: border-box;
+            }
+            .kanban-mermaid-dist--grid .kanban-mermaid-zoom-wrap {
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .kanban-mermaid-dist--grid .kanban-mapa-proyecto {
+                display: flex;
+                flex-direction: column;
+            }
+            .kanban-mermaid-dist--grid .kanban-mermaid-viewport {
+                flex: 1;
+                width: 100%;
+                min-height: 220px;
+                box-sizing: border-box;
+            }
+            .kanban-mermaid-contenedor.kanban-mermaid-dist--vertical {
+                display: flex;
+                flex-direction: column;
+                flex-wrap: nowrap;
+                width: 100%;
+                gap: 16px;
+                align-items: stretch;
+            }
+            .kanban-mermaid-dist--vertical > .kanban-mapa-proyecto {
+                width: 100%;
+                min-width: 0;
+                max-width: none;
+                margin-bottom: 0;
+                flex: 0 0 auto;
+            }
+            .kanban-mermaid-contenedor.kanban-mermaid-dist--horizontal {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: stretch;
+                justify-content: flex-start;
+                overflow-x: auto;
+                overflow-y: hidden;
+                width: 100%;
+                gap: 12px;
+                scroll-snap-type: x proximity;
+                padding-bottom: 4px;
+            }
+            .kanban-mermaid-dist--horizontal > .kanban-mapa-proyecto {
+                flex: 0 0 auto;
+                width: min(520px, 85vw);
+                min-width: min(360px, 72vw);
+                max-width: 520px;
+                margin-bottom: 0;
+                scroll-snap-align: start;
+            }
+            .kanban-mermaid-dist--horizontal .kanban-mermaid-viewport,
+            .kanban-mermaid-dist--vertical .kanban-mermaid-viewport {
+                width: 100%;
+            }
+            .kanban-mermaid-contenedor.kanban-mermaid-dist--unificado {
+                display: block;
+                width: 100%;
+            }
+            .kanban-mapa-header-acciones {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
             }
             .kanban-mermaid-zoom-wrap {
                 display: flex;
@@ -928,31 +1015,24 @@ export const KanbanUI = {
         KanbanDB._filtrarRequisitosSinAncestros(tarea.requisito_ids, mapaTareas),
 
     _sanitizarMermaid: (texto) =>
-        String(texto).replace(/["\[\]{}|#;]/g, " ").replace(/\n/g, " ").trim(),
+        KanbanUI._etiquetaMermaidNodo(texto, 80),
 
-    _formatearTextoNodo: (texto, maxLineLen = 22, maxTotalLen = 50) => {
-        let res = String(texto).replace(/["\[\]{}|#;]/g, " ").replace(/\n/g, " ").trim();
-        if (res.length > maxTotalLen) {
-            res = res.slice(0, maxTotalLen) + "...";
-        }
-        const palabras = res.split(" ");
-        const lineas = [];
-        let lineaActual = "";
-        for (const pal of palabras) {
-            if (!lineaActual) {
-                lineaActual = pal;
-            } else if (lineaActual.length + 1 + pal.length <= maxLineLen) {
-                lineaActual += " " + pal;
-            } else {
-                lineas.push(lineaActual);
-                lineaActual = pal;
-            }
-        }
-        if (lineaActual) {
-            lineas.push(lineaActual);
-        }
-        return lineas.join("<br/>");
+    // Etiqueta segura en una sola línea para nodos Mermaid (sin <br/> ni saltos reales)
+    _etiquetaMermaidNodo: (texto, maxLen = 48) => {
+        let res = String(texto ?? "")
+            .replace(/[\r\n\u2028\u2029]+/g, " ")
+            .replace(/<br\s*\/?>/gi, " ")
+            .replace(/["\\#;|]/g, " ")
+            .replace(/[\[\]{}()]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!res) return "…";
+        if (res.length > maxLen) res = `${res.slice(0, maxLen - 1)}…`;
+        return res;
     },
+
+    _formatearTextoNodo: (texto, _maxLineLen = 22, maxTotalLen = 48) =>
+        KanbanUI._etiquetaMermaidNodo(texto, maxTotalLen),
 
     _PALETA_PROYECTO: [
         { bg: "rgba(45, 55, 72, 0.55)", border: "#4a5568", kanban: "rgba(45, 55, 72, 0.35)" },
@@ -1000,7 +1080,9 @@ export const KanbanUI = {
         return m ? parseInt(m[1], 10) : null;
     },
 
-    _obtenerApiMermaid: async () => {
+    _obtenerApiMermaid: async (cfg = null) => {
+        const layoutCfg = cfg || DiagramLayout.getConfig();
+        const spacing = DiagramLayout.mermaidSpacing(layoutCfg);
         // Siempre CDN: el Mermaid de Obsidian puede usar securityLevel estricto y bloquear clics
         if (!window._kanbanMermaidCDN) {
             const mod = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.esm.min.mjs");
@@ -1016,10 +1098,10 @@ export const KanbanUI = {
                     primaryTextColor: "#f8fafc"
                 },
                 flowchart: {
-                    curve: "basis",
-                    padding: 20,
-                    nodeSpacing: 50,
-                    rankSpacing: 60,
+                    curve: layoutCfg.curva,
+                    padding: spacing.padding,
+                    nodeSpacing: spacing.nodeSpacing,
+                    rankSpacing: spacing.rankSpacing,
                     htmlLabels: false
                 }
             });
@@ -1031,11 +1113,13 @@ export const KanbanUI = {
     _renderMermaidSvg: async (hostEl, codigo) => {
         hostEl.innerHTML = "";
         const renderId = `kanban-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const layoutCfg = DiagramLayout.getConfig();
+        const spacing = DiagramLayout.mermaidSpacing(layoutCfg);
 
         try {
-            const api = await KanbanUI._obtenerApiMermaid();
+            const api = await KanbanUI._obtenerApiMermaid(layoutCfg);
 
-            if (typeof api.initialize === "function" && !window._kanbanMermaidInit) {
+            if (typeof api.initialize === "function") {
                 api.initialize({
                     startOnLoad: false,
                     securityLevel: "loose",
@@ -1045,9 +1129,13 @@ export const KanbanUI = {
                         fontSize: "14px",
                         lineColor: "#718096"
                     },
-                    flowchart: { curve: "basis", padding: 20, nodeSpacing: 50, rankSpacing: 60 }
+                    flowchart: {
+                        curve: layoutCfg.curva,
+                        padding: spacing.padding,
+                        nodeSpacing: spacing.nodeSpacing,
+                        rankSpacing: spacing.rankSpacing
+                    }
                 });
-                window._kanbanMermaidInit = true;
             }
 
             if (typeof api.render === "function") {
@@ -1548,72 +1636,83 @@ export const KanbanUI = {
     },
 
     _construirMermaid: (tareas, agruparPorProyecto = false) => {
-        console.log("=== [DEBUG] _construirMermaid ===");
-        console.log("Tareas recibidas:", tareas.map(t => ({ id: t.id, texto: t.texto, estado: t.estado, subtareasCount: t.subtareas ? t.subtareas.length : 0 })));
-        console.log("Preferencia mostrar checklist:", KanbanPrefs.isMostrarChecklist());
+        const cfg = DiagramLayout.getConfig();
         const mapa = new Map(tareas.map(t => [t.id, t]));
-        let codigo = "flowchart TD\n";
+        const dir = DiagramLayout.flowchartDirection(cfg);
+        const ordenadas = DiagramLayout.ordenarTareas(
+            tareas, cfg.orden, mapa, KanbanUI._requisitosVisibles
+        );
+
+        let codigo = `flowchart ${dir}\n`;
         codigo += "  classDef bloqueada fill:#1a2332,stroke:#718096,color:#cbd5e1,stroke-width:2px\n";
         codigo += "  classDef porHacer fill:#334155,stroke:#94a3b8,color:#f8fafc,stroke-width:2px\n";
         codigo += "  classDef enProceso fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px\n";
         codigo += "  classDef terminado fill:#059669,stroke:#6ee7b7,color:#ffffff,stroke-width:2px\n";
         codigo += "  classDef subtareaPendiente fill:#1e293b,stroke:#64748b,color:#94a3b8,stroke-width:1px\n";
         codigo += "  classDef subtareaTerminada fill:#022c22,stroke:#10b981,color:#a7f3d0,stroke-width:1px\n";
+        codigo += "  classDef hubCentral fill:#7c3aed,stroke:#c4b5fd,color:#ffffff,stroke-width:3px\n";
 
         const clases = [];
-        const emitirNodo = (t, indent = "  ") => {
-            const label = KanbanUI._formatearTextoNodo(t.texto);
-            // Forma stadium (pastilla) para aspecto de chip
-            codigo += `${indent}T${t.id}(["${label}"])\n`;
-
-            if (KanbanPrefs.isMostrarChecklist() && t.estado !== "Terminado" && t.subtareas && t.subtareas.length > 0) {
-                t.subtareas.forEach((st, idx) => {
-                    const prefix = st.completado ? "[✓] " : "[ ] ";
-                    const subLabel = KanbanUI._formatearTextoNodo(prefix + st.texto);
-                    const subNodeId = `T${t.id}_S${idx}`;
-                    
-                    // Emitir nodo hijo
-                    codigo += `${indent}${subNodeId}["${subLabel}"]\n`;
-                    
-                    // Conectar la tarea con su subtarea
-                    codigo += `${indent}T${t.id} -.-> ${subNodeId}\n`;
-                    
-                    // Asignar clase de estilo
-                    if (st.completado) {
-                        clases.push(`class ${subNodeId} subtareaTerminada`);
-                    } else {
-                        clases.push(`class ${subNodeId} subtareaPendiente`);
-                    }
-                });
-            }
+        const emitirChecklist = (t, indent) => {
+            if (!KanbanPrefs.isMostrarChecklist() || t.estado === "Terminado" || !t.subtareas?.length) return;
+            t.subtareas.forEach((st, idx) => {
+                const prefix = st.completado ? "✓ " : "○ ";
+                const subLabel = KanbanUI._formatearTextoNodo(prefix + st.texto);
+                const subNodeId = `T${t.id}_S${idx}`;
+                codigo += `${indent}${subNodeId}["${subLabel}"]\n`;
+                codigo += `${indent}T${t.id} -.-> ${subNodeId}\n`;
+                clases.push(`class ${subNodeId} ${st.completado ? "subtareaTerminada" : "subtareaPendiente"}`);
+            });
         };
-        const emitirClases = (t) => {
-            if (KanbanUI._esBloqueada(t, mapa)) clases.push(`class T${t.id} bloqueada`);
+
+        const emitirNodo = (t, indent = "  ", esHub = false) => {
+            const label = KanbanUI._formatearTextoNodo(t.texto);
+            // Stadium para todos; el hub se distingue por clase hubCentral (evita ((\"...\")) inválido)
+            codigo += `${indent}T${t.id}(["${label}"])\n`;
+            emitirChecklist(t, indent);
+        };
+
+        const emitirClases = (t, esHub = false) => {
+            if (esHub) clases.push(`class T${t.id} hubCentral`);
+            else if (KanbanUI._esBloqueada(t, mapa)) clases.push(`class T${t.id} bloqueada`);
             else if (t.estado === "Terminado") clases.push(`class T${t.id} terminado`);
             else if (t.estado === "En Proceso") clases.push(`class T${t.id} enProceso`);
             else clases.push(`class T${t.id} porHacer`);
         };
 
-        if (agruparPorProyecto) {
-            KanbanUI._agruparPorProyecto(tareas).forEach((grupo, idx) => {
+        if (cfg.modo === "arana") {
+            const hub = DiagramLayout.elegirHubArana(ordenadas, mapa, KanbanUI._requisitosVisibles);
+            const capas = DiagramLayout.capasArana(ordenadas, mapa, hub.id, KanbanUI._requisitosVisibles)
+                .filter(([, lista]) => lista?.length);
+            let anclaCapa = null;
+            capas.forEach(([, lista]) => {
+                lista.forEach(t => emitirNodo(t, "  ", t.id === hub.id));
+                if (anclaCapa && lista[0] && lista[0].id !== anclaCapa) {
+                    codigo += `  T${anclaCapa} ~~~ T${lista[0].id}\n`;
+                }
+                anclaCapa = lista[lista.length - 1]?.id ?? anclaCapa;
+            });
+            ordenadas.forEach(t => emitirClases(t, t.id === hub.id));
+        } else if (agruparPorProyecto) {
+            KanbanUI._agruparPorProyecto(ordenadas).forEach((grupo, idx) => {
                 const sgId = `SG${idx}`;
                 const titulo = KanbanUI._sanitizarMermaid(grupo.nombre);
                 const color = KanbanUI._colorProyecto(idx);
                 codigo += `  subgraph ${sgId}["📁 ${titulo}"]\n`;
-                codigo += "    direction LR\n";
+                codigo += `    direction ${cfg.dirFlujo}\n`;
                 grupo.tareas.forEach(t => emitirNodo(t, "    "));
                 codigo += "  end\n";
                 codigo += `  style ${sgId} fill:${color.bg},stroke:${color.border},color:#e2e8f0\n`;
             });
-            tareas.forEach(t => emitirClases(t));
+            ordenadas.forEach(t => emitirClases(t));
         } else {
-            tareas.forEach(t => {
+            ordenadas.forEach(t => {
                 emitirNodo(t);
                 emitirClases(t);
             });
         }
 
-        tareas.forEach(t => {
+        ordenadas.forEach(t => {
             KanbanUI._requisitosVisibles(t, mapa).forEach(reqId => {
                 if (mapa.has(reqId)) codigo += `  T${reqId} --> T${t.id}\n`;
             });
@@ -1673,6 +1772,49 @@ export const KanbanUI = {
         vista.iniciar();
     },
 
+    _columnasCuadriculaMapa: (cantidad) => {
+        if (cantidad <= 1) return 1;
+        if (cantidad === 2) return 2;
+        if (cantidad <= 4) return 2;
+        return Math.min(3, Math.ceil(cantidad / 2));
+    },
+
+    _ajustarCuadriculaMapa: (host) => {
+        const celdas = host.querySelectorAll(":scope > .kanban-mapa-proyecto");
+        const n = celdas.length;
+        if (!n) return;
+        const cols = KanbanUI._columnasCuadriculaMapa(n);
+        host.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+        host.style.width = "100%";
+    },
+
+    _ajustarDistribucionMapa: (host, layoutCfg) => {
+        if (layoutCfg.dirDiagramas === "cuadricula") {
+            KanbanUI._ajustarCuadriculaMapa(host);
+        } else {
+            host.style.gridTemplateColumns = "";
+        }
+    },
+
+    _renderDiagramasEnContenedor: async (mermaidHost, tareasGrupo, nombreProyecto, indiceColor, db, dbPath, onRefresh, layoutCfg) => {
+        const mapa = new Map(tareasGrupo.map(t => [t.id, t]));
+        const separarArboles = DiagramLayout.debeSepararBloques(layoutCfg.dirDiagramas);
+        const componentes = separarArboles
+            ? DiagramLayout.componentesConexos(tareasGrupo, mapa, KanbanUI._requisitosVisibles)
+            : [tareasGrupo];
+
+        for (let j = 0; j < componentes.length; j++) {
+            const titulo = DiagramLayout.tituloComponente(
+                nombreProyecto, componentes[j], j, componentes.length, mapa, KanbanUI._requisitosVisibles
+            );
+            const zoomKey = componentes.length > 1 ? `${nombreProyecto}:c${j}` : nombreProyecto;
+            await KanbanUI._renderBloqueMermaid(
+                mermaidHost, componentes[j], db, dbPath,
+                titulo, indiceColor, false, onRefresh, zoomKey
+            );
+        }
+    },
+
     _renderMapa: async (contenedor, tareas, proyectoFiltro, db, dbPath, onRefresh) => {
         const wrapper = document.createElement("div");
         wrapper.className = "kanban-seccion-mapa";
@@ -1686,22 +1828,35 @@ export const KanbanUI = {
             : "🔬 Mapa de Dependencias — Árbol de Ciencia";
         header.appendChild(titulo);
 
+        const accionesMapa = document.createElement("div");
+        accionesMapa.className = "kanban-mapa-header-acciones";
+
         const btnChecklist = document.createElement("button");
         btnChecklist.type = "button";
         btnChecklist.className = "kanban-btn-colapsar-mapa";
-        btnChecklist.style.marginRight = "8px";
         const actualizarBotonChecklist = () => {
             const activo = KanbanPrefs.isMostrarChecklist();
             btnChecklist.textContent = activo ? "☑ Ocultar checklist" : "☐ Mostrar checklist";
         };
         actualizarBotonChecklist();
         btnChecklist.addEventListener("click", () => {
-            const nuevoVal = !KanbanPrefs.isMostrarChecklist();
-            KanbanPrefs.setMostrarChecklist(nuevoVal);
+            KanbanPrefs.setMostrarChecklist(!KanbanPrefs.isMostrarChecklist());
             actualizarBotonChecklist();
             void onRefresh?.();
         });
-        header.appendChild(btnChecklist);
+        accionesMapa.appendChild(btnChecklist);
+
+        const btnLayout = document.createElement("button");
+        btnLayout.type = "button";
+        btnLayout.className = "kanban-btn-colapsar-mapa";
+        btnLayout.textContent = "📐 Distribución";
+        btnLayout.title = "Modo, direcciones, orden y estilo del diagrama";
+        btnLayout.addEventListener("click", () => {
+            const app = KanbanUI._getApp();
+            if (!app) return;
+            new DiagramaLayoutModal(app, () => void onRefresh?.()).open();
+        });
+        accionesMapa.appendChild(btnLayout);
 
         const btnColapsar = document.createElement("button");
         btnColapsar.type = "button";
@@ -1720,35 +1875,48 @@ export const KanbanUI = {
         btnColapsar.addEventListener("click", () => {
             aplicarColapso(!cuerpo.classList.contains("kanban-mapa-cuerpo--oculto"));
         });
-        header.appendChild(btnColapsar);
+        accionesMapa.appendChild(btnColapsar);
+        header.appendChild(accionesMapa);
         wrapper.appendChild(header);
 
         const hint = document.createElement("p");
         hint.className = "kanban-mermaid-hint";
-        hint.textContent = "💡 Arrastra chips · Clic editar · Rueda desplaza · Ctrl+rueda zoom · Botón central o Alt+arrastrar · Minimapa si el diagrama no cabe.";
+        hint.textContent = "💡 Apilados = ancho completo en columna · En fila = paneles fijos en una sola fila (desplázate →) · Cuadrícula = rejilla que rellena el ancho · Un solo diagrama = todo junto.";
         cuerpo.appendChild(hint);
 
         const mermaidHost = document.createElement("div");
         mermaidHost.className = "kanban-mermaid-contenedor";
+        const layoutCfg = DiagramLayout.getConfig();
+        mermaidHost.classList.add(DiagramLayout.cssDistribucionDiagramas(layoutCfg.dirDiagramas));
 
         if (tareas.length === 0) {
             const vacio = document.createElement("p");
             vacio.className = "kanban-vacio";
             vacio.textContent = "Añade tareas para visualizar el árbol tecnológico.";
             mermaidHost.appendChild(vacio);
-        } else if (!proyectoFiltro) {
+        } else if (!proyectoFiltro && layoutCfg.dirDiagramas !== "unificado") {
             const grupos = KanbanUI._agruparPorProyecto(tareas);
             for (let i = 0; i < grupos.length; i++) {
-                await KanbanUI._renderBloqueMermaid(
-                    mermaidHost, grupos[i].tareas, db, dbPath,
-                    grupos[i].nombre, i, false, onRefresh, grupos[i].nombre
+                await KanbanUI._renderDiagramasEnContenedor(
+                    mermaidHost, grupos[i].tareas, grupos[i].nombre, i,
+                    db, dbPath, onRefresh, layoutCfg
                 );
             }
         } else {
-            await KanbanUI._renderBloqueMermaid(
-                mermaidHost, tareas, db, dbPath, null, 0, false, onRefresh, proyectoFiltro
-            );
+            const unificar = !proyectoFiltro && layoutCfg.dirDiagramas === "unificado";
+            if (!unificar) {
+                const nombre = proyectoFiltro || "Proyecto";
+                await KanbanUI._renderDiagramasEnContenedor(
+                    mermaidHost, tareas, nombre, 0, db, dbPath, onRefresh, layoutCfg
+                );
+            } else {
+                await KanbanUI._renderBloqueMermaid(
+                    mermaidHost, tareas, db, dbPath, null, 0, true, onRefresh, "unificado"
+                );
+            }
         }
+
+        KanbanUI._ajustarDistribucionMapa(mermaidHost, layoutCfg);
 
         cuerpo.appendChild(mermaidHost);
         wrapper.appendChild(cuerpo);
