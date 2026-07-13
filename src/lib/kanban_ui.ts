@@ -17,6 +17,8 @@ export const KanbanUI = {
     ESTADOS: ["Por Hacer", "En Proceso", "Terminado"],
     MIME_TAREA_DRAG: "application/x-kanban-tarea-id",
     proyectosFiltrados: new Set(),
+    _mostrarCompletadas: true,
+    _mostrarBloqueadas: true,
 
     configure: (app) => {
         kanbanUiApp = app;
@@ -302,7 +304,11 @@ export const KanbanUI = {
                 border-radius: 16px;
                 background: transparent;
             }
+            .kanban-mermaid-overlay.kanban-mermaid-overlay--subtarea {
+                cursor: pointer;
+            }
             .kanban-mermaid-overlay:active { cursor: grabbing; }
+            .kanban-mermaid-overlay.kanban-mermaid-overlay--subtarea:active { cursor: pointer; }
             .kanban-mermaid-overlay.kanban-mermaid-drop-over {
                 outline: 2px dashed var(--interactive-accent);
                 outline-offset: 2px;
@@ -388,17 +394,42 @@ export const KanbanUI = {
                 margin: 0;
                 color: var(--text-accent);
             }
+            .kanban-btn-vista,
             .kanban-btn-colapsar-mapa {
-                padding: 4px 12px;
+                padding: 6px 12px;
                 border-radius: 6px;
                 border: 1px solid var(--background-modifier-border);
-                background: var(--background-secondary);
+                background: var(--background-primary);
                 cursor: pointer;
                 font-size: 0.85em;
                 white-space: nowrap;
+                color: var(--text-muted);
             }
+            .kanban-btn-vista.is-active,
+            .kanban-btn-colapsar-mapa.is-active {
+                border-color: var(--interactive-accent);
+                background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary));
+                color: var(--text-normal);
+                font-weight: 600;
+            }
+            .kanban-btn-vista:hover,
             .kanban-btn-colapsar-mapa:hover {
                 border-color: var(--interactive-accent);
+            }
+            .kanban-barra-vistas {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                justify-content: center;
+                min-width: 0;
+            }
+            .kanban-barra-vistas-titulo {
+                font-size: 0.82em;
+                font-weight: 600;
+                color: var(--text-muted);
+                margin-right: 4px;
+                white-space: nowrap;
             }
             .kanban-mapa-cuerpo--oculto {
                 display: none !important;
@@ -491,21 +522,25 @@ export const KanbanUI = {
             .kanban-toggle-grupo input { cursor: pointer; accent-color: var(--interactive-accent); }
             .kanban-toggle-grupo label { cursor: pointer; font-weight: 500; }
             .kanban-toolbar {
-                display: flex;
-                justify-content: space-between;
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
                 align-items: center;
-                gap: 16px;
-                flex-wrap: wrap;
+                gap: 12px 20px;
+            }
+            @media (max-width: 1100px) {
+                .kanban-toolbar {
+                    grid-template-columns: 1fr;
+                }
+                .kanban-barra-vistas {
+                    justify-content: flex-start;
+                }
             }
             .kanban-panel-superior {
                 background: var(--background-secondary);
                 border: 1px solid var(--background-modifier-border);
                 border-radius: 10px;
-                padding: 16px 20px;
-                position: sticky;
-                top: 0;
-                z-index: 100;
-                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                padding: 14px 18px;
+                margin-bottom: 16px;
             }
             .kanban-proyectos-cards-container {
                 display: grid;
@@ -621,24 +656,40 @@ export const KanbanUI = {
                 flex-direction: column;
                 gap: 8px;
             }
-            .kanban-proyecto-fila {
+            .kanban-gestor-fila {
                 display: flex;
+                flex-flow: row nowrap;
                 justify-content: space-between;
                 align-items: center;
-                gap: 12px;
-                padding: 10px 12px;
+                gap: 16px;
+                padding: 12px 14px;
                 border-radius: 8px;
                 border: 1px solid var(--background-modifier-border);
                 background: var(--background-primary);
             }
-            .kanban-proyecto-info {
+            .kanban-gestor-info > div:first-child {
+                font-weight: 600;
+                line-height: 1.35;
+                word-break: break-word;
+            }
+            .kanban-proyecto-info,
+            .kanban-gestor-info {
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
                 min-width: 0;
+                flex: 1;
             }
-            .kanban-proyecto-btn-archivar,
-            .kanban-proyecto-btn-restaurar {
+            .kanban-gestor-acciones {
+                display: flex;
+                gap: 8px;
+                flex-shrink: 0;
+                align-items: center;
+                margin-left: auto;
+            }
+            .kanban-gestor-btn-archivar,
+            .kanban-gestor-btn-restaurar,
+            .kanban-gestor-btn-editar {
                 flex-shrink: 0;
                 padding: 6px 12px;
                 border-radius: 6px;
@@ -648,8 +699,169 @@ export const KanbanUI = {
                 font-size: 0.85em;
                 white-space: nowrap;
             }
-            .kanban-proyecto-btn-archivar:hover { border-color: var(--text-muted); }
-            .kanban-proyecto-btn-restaurar:hover { border-color: var(--interactive-accent); }
+            .kanban-gestor-btn-borrar {
+                flex-shrink: 0;
+                padding: 6px 12px;
+                border-radius: 6px;
+                border: 1px solid var(--text-error);
+                background: var(--background-secondary);
+                color: var(--text-error);
+                cursor: pointer;
+                font-size: 0.85em;
+                white-space: nowrap;
+            }
+            .kanban-gestor-btn-archivar:hover { border-color: var(--text-muted); }
+            .kanban-gestor-btn-restaurar:hover,
+            .kanban-gestor-btn-editar:hover { border-color: var(--interactive-accent); }
+            .kanban-gestor-btn-borrar:hover { background: var(--text-error); color: var(--text-on-accent); }
+            .kanban-gestor-filtro {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 16px;
+                flex-wrap: wrap;
+            }
+            .kanban-estructura-tabs {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
+                flex-wrap: wrap;
+            }
+            .kanban-estructura-tab {
+                padding: 6px 14px;
+                border-radius: 6px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                cursor: pointer;
+                font-size: 0.9em;
+            }
+            .kanban-estructura-tab.is-active {
+                border-color: var(--interactive-accent);
+                background: var(--interactive-accent);
+                color: var(--text-on-accent);
+                font-weight: 600;
+            }
+            .kanban-estructura-editor {
+                width: 100%;
+                flex: 1 1 auto;
+                min-height: 72vh;
+                height: 72vh;
+                max-height: none;
+                font-family: var(--font-monospace);
+                font-size: 1.05em;
+                line-height: 1.65;
+                padding: 18px 20px;
+                border-radius: 8px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-primary);
+                color: var(--text-normal);
+                resize: vertical;
+                box-sizing: border-box;
+                margin-bottom: 12px;
+            }
+            .kanban-modal-estructura {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                min-height: 0;
+                flex: 1 1 auto;
+                box-sizing: border-box;
+            }
+            .modal-container:has(.kanban-modal-estructura) {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: 100% !important;
+                inset: 0 !important;
+            }
+            .modal:has(.kanban-modal-estructura) {
+                width: min(96vw, 1400px) !important;
+                max-width: 96vw !important;
+                margin: auto !important;
+                position: relative !important;
+                max-height: 94vh;
+                display: flex;
+                flex-direction: column;
+            }
+            .modal:has(.kanban-modal-estructura) .modal-content {
+                max-height: none;
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                padding: 22px 28px;
+            }
+            .kanban-modal-estructura .kanban-estructura-tabs {
+                margin-bottom: 14px;
+                flex-shrink: 0;
+            }
+            .kanban-modal-estructura .kanban-formulario-acciones {
+                flex-shrink: 0;
+                margin-top: auto;
+            }
+            .modal-container:has(.kanban-modal-gestor) {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: 100% !important;
+            }
+            .modal:has(.kanban-modal-gestor) {
+                width: min(92vw, 680px) !important;
+                max-width: 92vw !important;
+                margin: auto !important;
+                max-height: 90vh;
+            }
+            .modal:has(.kanban-modal-gestor) .modal-content {
+                max-height: 88vh;
+                overflow-y: auto;
+                width: 100%;
+            }
+            .kanban-modal-gestor .kanban-gestor-fila {
+                display: flex !important;
+                flex-flow: row nowrap !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+            }
+            .kanban-modal-gestor .kanban-gestor-info {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+            }
+            .kanban-modal-gestor .kanban-gestor-acciones {
+                display: inline-flex !important;
+                flex-flow: row nowrap !important;
+                flex: 0 0 auto !important;
+                flex-shrink: 0 !important;
+                align-self: center !important;
+            }
+            .kanban-modal-gestor .kanban-gestor-acciones button,
+            .kanban-modal-gestor .kanban-formulario-acciones button {
+                display: inline-flex !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+                flex: 0 0 auto !important;
+                flex-shrink: 0 !important;
+                margin: 0 !important;
+            }
+            .modal:has(.kanban-modal-gestor) .modal-content button {
+                display: inline-flex !important;
+                width: auto !important;
+            }
+            .kanban-gestor-seccion-titulo {
+                margin: 0 0 10px 0;
+                font-size: 0.95em;
+            }
+            .kanban-gestor-seccion-titulo--muted {
+                color: var(--text-muted);
+            }
+            .kanban-proyectos-seccion + .kanban-proyectos-seccion {
+                margin-top: 20px;
+            }
             .kanban-columnas-wrapper {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
@@ -779,26 +991,74 @@ export const KanbanUI = {
                 display: flex;
                 gap: 12px;
                 justify-content: flex-end;
-                margin-top: 24px;
-                padding-top: 16px;
+                margin-top: 28px;
+                padding-top: 20px;
                 border-top: 1px solid var(--background-modifier-border);
             }
             .modal:has(.kanban-modal-tarea) {
-                width: min(960px, 94vw);
-                max-width: 960px;
+                width: min(1080px, 96vw);
+                max-width: 1080px;
             }
             .modal:has(.kanban-modal-tarea) .modal-content {
-                max-height: 88vh;
+                max-height: 90vh;
                 overflow-y: auto;
+                overflow-x: hidden;
+                padding: 22px 26px;
+            }
+            .kanban-modal-tarea {
+                padding: 4px 2px 8px;
             }
             .kanban-modal-tarea-titulo {
-                margin: 0 0 18px 0;
+                margin: 0 0 20px 0;
                 color: var(--text-accent);
+            }
+            .kanban-form-encabezado {
+                display: flex;
+                flex-direction: column;
+                gap: 18px;
+                margin-bottom: 24px;
+                padding-bottom: 22px;
+                border-bottom: 1px solid var(--background-modifier-border);
+            }
+            .kanban-form-meta-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+                gap: 18px;
+                align-items: stretch;
+            }
+            @media (max-width: 620px) {
+                .kanban-form-meta-grid { grid-template-columns: 1fr; }
+            }
+            .kanban-seccion-form {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 20px 22px;
+                border-radius: 10px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                overflow: visible;
+            }
+            .kanban-seccion-form-titulo {
+                margin: 0 0 2px 0;
+                font-size: 0.95em;
+                font-weight: 700;
+                color: var(--text-normal);
+            }
+            .kanban-toolbar-campo {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: center;
+                margin-top: 4px;
+            }
+            .kanban-toolbar-campo .kanban-input-sub {
+                flex: 1 1 200px;
             }
             .kanban-form-doble {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 22px;
+                gap: 24px;
                 align-items: start;
             }
             @media (max-width: 760px) {
@@ -807,57 +1067,177 @@ export const KanbanUI = {
             .kanban-form-columna {
                 display: flex;
                 flex-direction: column;
-                gap: 14px;
+                gap: 22px;
                 min-width: 0;
+                overflow: visible;
+            }
+            .kanban-form-columna-der {
+                gap: 24px;
             }
             .kanban-campo {
                 display: flex;
                 flex-direction: column;
+                gap: 8px;
+                min-width: 0;
+                overflow: visible;
+            }
+            .kanban-campo-estado {
+                min-width: 240px;
+            }
+            .kanban-campo-estado select {
+                display: block;
+            }
+            .kanban-checklist-composer {
+                display: flex !important;
+                flex-flow: row nowrap !important;
+                align-items: center !important;
+                gap: 8px;
+                margin-top: 18px;
+                padding: 6px 10px 6px 14px;
+                border-radius: 24px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-primary);
+                box-sizing: border-box;
+                width: 100%;
+            }
+            .kanban-checklist-campo {
+                flex: 1 1 0%;
+                min-width: 0;
+                display: block;
+            }
+            .kanban-checklist-composer-acciones {
+                display: flex !important;
+                flex-flow: row nowrap !important;
+                flex: 0 0 auto !important;
                 gap: 6px;
+                align-items: center;
+            }
+            .kanban-modal-tarea input.kanban-checklist-input {
+                display: block;
+                width: 100%;
+                border: none !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                outline: none !important;
+                height: 36px !important;
+                min-height: 36px !important;
+                padding: 8px 6px;
+                margin: 0;
+                font-size: 0.95em;
+                line-height: 1.45;
+                box-sizing: border-box;
+            }
+            .kanban-checklist-input:focus {
+                border: none !important;
+                box-shadow: none !important;
+                outline: none !important;
+            }
+            .kanban-checklist-btn-icono {
+                width: 36px;
+                height: 36px;
+                min-width: 36px;
+                min-height: 36px;
+                padding: 0;
+                border-radius: 50%;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                cursor: pointer;
+                font-size: 1em;
+                line-height: 1;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .kanban-checklist-btn-icono:hover {
+                border-color: var(--interactive-accent);
+                background: var(--background-modifier-hover);
             }
             .kanban-campo label {
                 font-weight: 600;
-                font-size: 0.9em;
+                font-size: 0.88em;
+                color: var(--text-muted);
             }
             .kanban-campo-nota {
                 flex: 1;
                 min-height: 0;
+            }
+            .kanban-modal-tarea input:not([type="checkbox"]):not(.kanban-checklist-input),
+            .kanban-modal-tarea select,
+            .kanban-modal-tarea textarea:not(.kanban-checklist-input) {
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                border-radius: 8px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-primary);
+                color: var(--text-normal);
+                font-size: 0.95em;
+                line-height: 1.45;
+            }
+            .kanban-modal-tarea input:not([type="checkbox"]):not(.kanban-checklist-input) {
+                min-height: 42px;
+                padding: 10px 14px;
+            }
+            .kanban-modal-tarea select,
+            .kanban-modal-tarea .kanban-input-estado {
+                min-height: 46px;
+                height: auto;
+                padding: 11px 40px 11px 14px;
+                line-height: 1.35;
+                cursor: pointer;
+                appearance: auto;
+                -webkit-appearance: menulist;
+                font-size: 1em;
+            }
+            .kanban-modal-tarea textarea:not(.kanban-checklist-input) {
+                padding: 12px 14px;
+            }
+            .kanban-modal-tarea input:not([type="checkbox"]):focus,
+            .kanban-modal-tarea select:focus,
+            .kanban-modal-tarea textarea:not(.kanban-checklist-input):focus {
+                border-color: var(--interactive-accent);
+                box-shadow: inset 0 0 0 1px var(--interactive-accent);
+                outline: none;
             }
             .kanban-input,
             .kanban-form-columna input,
             .kanban-form-columna select,
             .kanban-form-columna textarea {
                 width: 100%;
-                padding: 8px 12px;
-                border-radius: 6px;
-                border: 1px solid var(--background-modifier-border);
-                background: var(--background-primary);
+                max-width: 100%;
                 box-sizing: border-box;
             }
             .kanban-input-nota-amplia {
-                min-height: 220px;
+                min-height: 300px;
                 resize: vertical;
-                line-height: 1.45;
+                line-height: 1.55;
                 font-family: inherit;
                 flex: 1;
             }
             .kanban-fila-proyecto,
             .kanban-fila-acciones {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
                 align-items: center;
                 flex-wrap: wrap;
             }
-            .kanban-fila-proyecto .kanban-input { flex: 1; min-width: 120px; }
+            .kanban-fila-proyecto .kanban-input { flex: 1; min-width: 0; }
+            .kanban-fila-proyecto button,
+            .kanban-fila-acciones button {
+                flex-shrink: 0;
+                min-height: 42px;
+                padding: 8px 14px;
+            }
             .kanban-input-sub {
                 flex: 1;
-                min-width: 140px;
+                min-width: 0;
                 resize: none;
                 overflow: hidden;
-                min-height: 2.5em;
+                min-height: 42px;
                 line-height: 1.45;
                 word-break: break-word;
                 white-space: pre-wrap;
+                padding: 10px 14px;
             }
             .kanban-chips-requisitos {
                 display: flex;
@@ -892,20 +1272,67 @@ export const KanbanUI = {
             .kanban-subtareas-lista {
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
-                max-height: min(320px, 40vh);
+                gap: 10px;
+                max-height: min(340px, 42vh);
                 overflow-y: auto;
+                padding: 2px;
             }
             .kanban-subtarea-fila {
-                display: flex;
-                align-items: flex-start;
+                display: grid;
+                grid-template-columns: auto auto 1fr auto;
+                align-items: start;
                 gap: 8px;
+                padding: 8px 10px;
+                border-radius: 8px;
+                background: var(--background-primary);
+                border: 1px solid var(--background-modifier-border);
             }
             .kanban-subtarea-fila input[type="checkbox"] {
-                width: auto;
-                flex-shrink: 0;
+                -webkit-appearance: none;
+                appearance: none;
+                width: 18px;
+                height: 18px;
+                min-width: 18px;
+                min-height: 18px;
+                max-width: 18px;
+                max-height: 18px;
                 margin-top: 10px;
-                accent-color: var(--interactive-accent);
+                flex-shrink: 0;
+                flex-grow: 0;
+                border-radius: 50%;
+                border: 2px solid var(--background-modifier-border);
+                background: var(--background-primary);
+                cursor: pointer;
+                display: inline-grid;
+                place-content: center;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            .kanban-subtarea-fila input[type="checkbox"]:checked {
+                background: var(--interactive-accent);
+                border-color: var(--interactive-accent);
+            }
+            .kanban-subtarea-fila input[type="checkbox"]:checked::after {
+                content: "✓";
+                color: var(--text-on-accent);
+                font-size: 11px;
+                font-weight: 700;
+                line-height: 1;
+            }
+            .kanban-subtarea-acciones {
+                display: flex;
+                gap: 4px;
+                align-items: center;
+                flex-shrink: 0;
+            }
+            .kanban-subtarea-convertir,
+            .kanban-subtarea-quitar {
+                padding: 4px 8px;
+                border-radius: 6px;
+                border: 1px solid var(--background-modifier-border);
+                background: var(--background-secondary);
+                font-size: 0.82em;
+                opacity: 1;
             }
             .kanban-subtarea-texto {
                 flex: 1;
@@ -1002,12 +1429,124 @@ export const KanbanUI = {
     },
 
     _esBloqueada: (tarea, mapaTareas) => {
-        if (tarea.estado === "Terminado") return false;
+        // Solo las tareas «Por Hacer» pueden mostrarse como bloqueadas
+        if (tarea.estado !== "Por Hacer") return false;
+
+        const padreId = KanbanDB.extraerPadreDerivada(tarea.nota);
+        if (padreId != null) {
+            const padre = mapaTareas.get(padreId);
+            // Hijo derivado: si el padre ya avanzó, mostrar el estado real del hijo
+            if (padre && padre.estado !== "Por Hacer") return false;
+        }
+
         const ids = KanbanUI._requisitosVisibles(tarea, mapaTareas);
         if (ids.length === 0) return false;
         return ids.some(reqId => {
             const req = mapaTareas.get(reqId);
             return req && req.estado !== "Terminado";
+        });
+    },
+
+    // Subtarea de checklist sin estado propio: bloqueada solo si el padre está bloqueado
+    _subtareaChecklistBloqueada: (tareaPadre, subtarea, mapaTareas) => {
+        if (subtarea.completado) return false;
+        if (tareaPadre.estado !== "Por Hacer") return false;
+        return KanbanUI._esBloqueada(tareaPadre, mapaTareas);
+    },
+
+    _crearBotonVista: (contenedor, cfg) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kanban-btn-vista";
+        const sync = () => {
+            const activo = cfg.get();
+            btn.classList.toggle("is-active", activo);
+            btn.textContent = activo ? cfg.labelOn : cfg.labelOff;
+            if (cfg.titleOn || cfg.titleOff) {
+                btn.title = activo ? (cfg.titleOn || "") : (cfg.titleOff || "");
+            }
+        };
+        sync();
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            cfg.set(!cfg.get());
+            sync();
+            if (document.activeElement === btn) btn.blur();
+            void cfg.onChange?.();
+        });
+        if (cfg.id) btn.dataset.vistaId = cfg.id;
+        contenedor.appendChild(btn);
+        return btn;
+    },
+
+    _renderBarraVistas: (panel, onRefreshVista, vistaOpts) => {
+        const barra = document.createElement("div");
+        barra.className = "kanban-barra-vistas";
+        barra.appendChild(Object.assign(document.createElement("span"), {
+            className: "kanban-barra-vistas-titulo",
+            textContent: "Vista:"
+        }));
+
+        const sufijoBloq = vistaOpts.numBloqueadas > 0 ? ` (${vistaOpts.numBloqueadas})` : "";
+
+        KanbanUI._crearBotonVista(barra, {
+            id: "checklist",
+            get: () => KanbanPrefs.isMostrarChecklist(),
+            set: (v) => KanbanPrefs.setMostrarChecklist(v),
+            labelOn: "☑ Checklist",
+            labelOff: "☐ Checklist",
+            titleOn: "Ocultar subtareas de checklist en el diagrama",
+            titleOff: "Mostrar subtareas de checklist en el diagrama",
+            onChange: onRefreshVista
+        });
+
+        KanbanUI._crearBotonVista(barra, {
+            id: "completadas",
+            get: () => vistaOpts.mostrarCompletadas,
+            set: (v) => {
+                vistaOpts.mostrarCompletadas = v;
+                KanbanUI._mostrarCompletadas = v;
+                vistaOpts.setMostrarCompletadas(v);
+            },
+            labelOn: "☑ Completadas",
+            labelOff: "☐ Completadas",
+            titleOn: "Ocultar tareas y checklist completadas",
+            titleOff: "Mostrar tareas y checklist completadas",
+            onChange: onRefreshVista
+        });
+
+        KanbanUI._crearBotonVista(barra, {
+            id: "bloqueadas",
+            get: () => vistaOpts.mostrarBloqueadas,
+            set: (v) => {
+                vistaOpts.mostrarBloqueadas = v;
+                KanbanUI._mostrarBloqueadas = v;
+                vistaOpts.setMostrarBloqueadas(v);
+            },
+            labelOn: `☑ Bloqueadas${sufijoBloq}`,
+            labelOff: `☐ Bloqueadas${sufijoBloq}`,
+            titleOn: vistaOpts.numBloqueadas > 0
+                ? `Ocultar ${vistaOpts.numBloqueadas} tarea(s) bloqueada(s) del tablero y el diagrama`
+                : "No hay tareas bloqueadas; el filtro no tiene efecto ahora",
+            titleOff: "Mostrar tareas bloqueadas: «Por Hacer» con prerequisitos pendientes",
+            onChange: onRefreshVista
+        });
+
+        panel.appendChild(barra);
+    },
+
+    _sincronizarBotonesVista: (panel, vistaOpts) => {
+        const sufijoBloq = vistaOpts.numBloqueadas > 0 ? ` (${vistaOpts.numBloqueadas})` : "";
+        const defs = [
+            { id: "checklist", activo: KanbanPrefs.isMostrarChecklist(), on: "☑ Checklist", off: "☐ Checklist" },
+            { id: "completadas", activo: vistaOpts.mostrarCompletadas, on: "☑ Completadas", off: "☐ Completadas" },
+            { id: "bloqueadas", activo: vistaOpts.mostrarBloqueadas, on: `☑ Bloqueadas${sufijoBloq}`, off: `☐ Bloqueadas${sufijoBloq}` }
+        ];
+        defs.forEach(def => {
+            const btn = panel.querySelector(`.kanban-btn-vista[data-vista-id="${def.id}"]`);
+            if (!btn) return;
+            btn.classList.toggle("is-active", def.activo);
+            btn.textContent = def.activo ? def.on : def.off;
         });
     },
 
@@ -1352,7 +1891,7 @@ export const KanbanUI = {
         let mejorDist = Infinity;
 
         capa.querySelectorAll(".kanban-mermaid-overlay").forEach(ov => {
-            if (ov === excluir) return;
+            if (ov === excluir || ov.dataset.subtareaIdx !== undefined) return;
 
             const r = ov.getBoundingClientRect();
             const dentro = clientX >= r.left && clientX <= r.right
@@ -1433,7 +1972,7 @@ export const KanbanUI = {
         };
 
         const resaltarDestino = (candidato, arrastradoId) => {
-            if (!candidato) {
+            if (!candidato || candidato.dataset.subtareaIdx !== undefined) {
                 limpiarDestino();
                 return;
             }
@@ -1460,16 +1999,21 @@ export const KanbanUI = {
 
             svg.querySelectorAll("g.node[data-tarea-id]").forEach(nodo => {
                 const tareaId = nodo.dataset.tareaId;
-                if (!tareaId || vistos.has(tareaId)) return;
-                vistos.add(tareaId);
+                if (!tareaId) return;
+                const subIdxAttr = nodo.dataset.subtareaIdx;
+                const overlayKey = subIdxAttr !== undefined ? `${tareaId}:s${subIdxAttr}` : String(tareaId);
+                if (vistos.has(overlayKey)) return;
+                vistos.add(overlayKey);
 
                 const rect = nodo.getBoundingClientRect();
                 if (rect.width < 2 || rect.height < 2) return;
 
                 const ov = document.createElement("div");
                 ov.className = "kanban-mermaid-overlay";
+                if (subIdxAttr !== undefined) {
+                    ov.classList.add("kanban-mermaid-overlay--subtarea");
+                }
                 ov.dataset.tareaId = tareaId;
-                const subIdxAttr = nodo.dataset.subtareaIdx;
                 if (subIdxAttr !== undefined) {
                     ov.dataset.subtareaIdx = subIdxAttr;
                 }
@@ -1487,7 +2031,7 @@ export const KanbanUI = {
                 } else {
                     tooltipText = nodo.querySelector("text")?.textContent?.trim() || "";
                 }
-                ov.title = tooltipText + (subIdxAttr !== undefined ? " · Clic: convertir en tarea (elegir vínculo)" : "");
+                ov.title = tooltipText + (subIdxAttr !== undefined ? " · Clic: abrir tarea padre" : " · Clic: editar");
                 ov.style.left = `${(rect.left - hostRect.left) / zoom}px`;
                 ov.style.top = `${(rect.top - hostRect.top) / zoom}px`;
                 ov.style.width = `${rect.width / zoom}px`;
@@ -1521,22 +2065,15 @@ export const KanbanUI = {
                 ?.classList.remove("kanban-mermaid-arrastrando");
             if (fantasma) fantasma.remove();
 
-            if (arrastrando) {
+            if (arrastrando && !activo.esSubtarea) {
                 const destino = overlayDestino
                     || KanbanUI._overlayEnPunto(capa, clientX, clientY, overlay);
-                if (destino) {
+                if (destino && !destino.dataset.subtareaIdx) {
                     const destinoId = parseInt(destino.dataset.tareaId, 10);
                     await aplicarRequisito(tareaId, destinoId);
                 }
-            } else if (fueClick) {
-                const subIdxAttr = overlay.dataset.subtareaIdx;
-                if (subIdxAttr !== undefined) {
-                    await KanbanUI._convertirSubtareaDiagrama(
-                        db, dbPath, tareaId, parseInt(subIdxAttr, 10), onRefresh
-                    );
-                } else {
-                    KanbanUI._abrirEdicionTarea(db, dbPath, tareaId, onRefresh);
-                }
+            } else if (fueClick || activo.esSubtarea) {
+                KanbanUI._abrirEdicionTarea(db, dbPath, tareaId, onRefresh);
             }
 
             limpiarDestino();
@@ -1546,7 +2083,7 @@ export const KanbanUI = {
         };
 
         const moverDocumento = (e) => {
-            if (!activo) return;
+            if (!activo || activo.esSubtarea) return;
 
             const dx = e.clientX - activo.startX;
             const dy = e.clientY - activo.startY;
@@ -1587,9 +2124,12 @@ export const KanbanUI = {
             const tareaId = parseInt(overlay.dataset.tareaId, 10);
             if (!tareaId) return;
 
+            const esSubtarea = overlay.dataset.subtareaIdx !== undefined;
+
             activo = {
                 overlay,
                 tareaId,
+                esSubtarea,
                 texto: overlay.title || `#${tareaId}`,
                 startX: e.clientX,
                 startY: e.clientY,
@@ -1653,15 +2193,20 @@ export const KanbanUI = {
         codigo += "  classDef hubCentral fill:#7c3aed,stroke:#c4b5fd,color:#ffffff,stroke-width:3px\n";
 
         const clases = [];
+        const mostrarCompletadas = KanbanUI._mostrarCompletadas !== false;
         const emitirChecklist = (t, indent) => {
             if (!KanbanPrefs.isMostrarChecklist() || t.estado === "Terminado" || !t.subtareas?.length) return;
             t.subtareas.forEach((st, idx) => {
+                if (!mostrarCompletadas && st.completado) return;
                 const prefix = st.completado ? "✓ " : "○ ";
                 const subLabel = KanbanUI._formatearTextoNodo(prefix + st.texto);
                 const subNodeId = `T${t.id}_S${idx}`;
                 codigo += `${indent}${subNodeId}["${subLabel}"]\n`;
                 codigo += `${indent}T${t.id} -.-> ${subNodeId}\n`;
-                clases.push(`class ${subNodeId} ${st.completado ? "subtareaTerminada" : "subtareaPendiente"}`);
+                const claseSub = KanbanUI._subtareaChecklistBloqueada(t, st, mapa)
+                    ? "bloqueada"
+                    : (st.completado ? "subtareaTerminada" : "subtareaPendiente");
+                clases.push(`class ${subNodeId} ${claseSub}`);
             });
         };
 
@@ -1831,21 +2376,6 @@ export const KanbanUI = {
         const accionesMapa = document.createElement("div");
         accionesMapa.className = "kanban-mapa-header-acciones";
 
-        const btnChecklist = document.createElement("button");
-        btnChecklist.type = "button";
-        btnChecklist.className = "kanban-btn-colapsar-mapa";
-        const actualizarBotonChecklist = () => {
-            const activo = KanbanPrefs.isMostrarChecklist();
-            btnChecklist.textContent = activo ? "☑ Ocultar checklist" : "☐ Mostrar checklist";
-        };
-        actualizarBotonChecklist();
-        btnChecklist.addEventListener("click", () => {
-            KanbanPrefs.setMostrarChecklist(!KanbanPrefs.isMostrarChecklist());
-            actualizarBotonChecklist();
-            void onRefresh?.();
-        });
-        accionesMapa.appendChild(btnChecklist);
-
         const btnLayout = document.createElement("button");
         btnLayout.type = "button";
         btnLayout.className = "kanban-btn-colapsar-mapa";
@@ -1982,7 +2512,10 @@ export const KanbanUI = {
             card.appendChild(notaEl);
         }
 
-        const subs = tarea.subtareas || [];
+        const subsTodas = tarea.subtareas || [];
+        const subs = KanbanUI._mostrarCompletadas !== false
+            ? subsTodas
+            : subsTodas.filter(s => !s.completado);
         const imgs = tarea.imagenes || [];
         const rutaNotaDerivada = KanbanDB.extraerRutaNotaChecklist(tarea.nota);
         if (subs.length > 0) {
@@ -2056,7 +2589,7 @@ export const KanbanUI = {
         });
     },
 
-    _renderPanelSuperior: (contenedor, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro) => {
+    _renderPanelSuperior: (contenedor, db, dbPath, onRefresh, onRefreshVista, proyectoFiltro, setProyectoFiltro, vistaOpts) => {
         const app = KanbanUI._getApp();
         const panel = document.createElement("div");
         panel.className = "kanban-panel-superior";
@@ -2092,6 +2625,10 @@ export const KanbanUI = {
         filtroGrupo.appendChild(selectProyecto);
         toolbar.appendChild(filtroGrupo);
 
+        if (vistaOpts) {
+            KanbanUI._renderBarraVistas(toolbar, onRefreshVista, vistaOpts);
+        }
+
         const accionesGrupo = document.createElement("div");
         accionesGrupo.className = "kanban-toolbar-acciones";
 
@@ -2105,6 +2642,28 @@ export const KanbanUI = {
             ).open();
         });
         accionesGrupo.appendChild(btnGestion);
+
+        const btnTareas = document.createElement("button");
+        btnTareas.className = "kanban-btn-gestion-proyectos";
+        btnTareas.textContent = "🧪 Tareas";
+        btnTareas.title = "Ocultar, mostrar o eliminar tareas";
+        btnTareas.addEventListener("click", () => {
+            if (!app) return;
+            new KanbanModals.TareasGestionModal(
+                app, db, dbPath, onRefresh, KanbanUI._abrirEdicionTarea
+            ).open();
+        });
+        accionesGrupo.appendChild(btnTareas);
+
+        const btnEstructura = document.createElement("button");
+        btnEstructura.className = "kanban-btn-gestion-proyectos";
+        btnEstructura.textContent = "🗂️ Estructura";
+        btnEstructura.title = "Ver y copiar estructura JSON/TOON para IA";
+        btnEstructura.addEventListener("click", () => {
+            if (!app) return;
+            new KanbanModals.EstructuraVaultModal(app, db).open();
+        });
+        accionesGrupo.appendChild(btnEstructura);
 
         const btnPapelera = document.createElement("button");
         btnPapelera.className = "kanban-btn-gestion-proyectos";
@@ -2142,12 +2701,11 @@ export const KanbanUI = {
         contenedor.appendChild(panel);
     },
 
-    _renderKanban: (contenedor, tareas, db, dbPath, onRefresh, proyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas, numCompletadas) => {
-        const mapa = new Map(tareas.map(t => [t.id, t]));
-        const bloqueadas = tareas.filter(t => KanbanUI._esBloqueada(t, mapa));
-        const tareasVisibles = mostrarBloqueadas
-            ? tareas
-            : tareas.filter(t => !KanbanUI._esBloqueada(t, mapa));
+    _renderKanban: (
+        contenedor, tareasVista, mapaCompleto, db, dbPath, onRefresh,
+        proyectoFiltro, mostrarBloqueadas, mostrarCompletadas, numCompletadas, numBloqueadas
+    ) => {
+        const tareasVisibles = tareasVista;
 
         const seccion = document.createElement("div");
         seccion.className = "kanban-seccion-tablero";
@@ -2168,10 +2726,10 @@ export const KanbanUI = {
         } else {
             subtitulo.textContent = `${tareasVisibles.length} tareas visibles`;
         }
-        if (bloqueadas.length > 0) {
+        if (numBloqueadas > 0) {
             subtitulo.textContent += mostrarBloqueadas
-                ? ` · ${bloqueadas.length} bloqueada(s)`
-                : ` · ${bloqueadas.length} bloqueada(s) oculta(s)`;
+                ? ` · ${numBloqueadas} bloqueada(s)`
+                : ` · ${numBloqueadas} bloqueada(s) oculta(s)`;
         }
         if (numCompletadas > 0) {
             subtitulo.textContent += mostrarCompletadas
@@ -2180,41 +2738,6 @@ export const KanbanUI = {
         }
         tituloGrupo.appendChild(subtitulo);
         header.appendChild(tituloGrupo);
-
-        const togglesWrap = document.createElement("div");
-        togglesWrap.className = "kanban-toggles-wrap";
-
-        const toggleBloqueadas = document.createElement("div");
-        toggleBloqueadas.className = "kanban-toggle-grupo";
-        const chkIdBloq = `kanban-mostrar-bloqueadas-${Date.now()}`;
-        const chkBloqueadas = document.createElement("input");
-        chkBloqueadas.type = "checkbox";
-        chkBloqueadas.id = chkIdBloq;
-        chkBloqueadas.checked = mostrarBloqueadas;
-        chkBloqueadas.addEventListener("change", () => setMostrarBloqueadas(chkBloqueadas.checked));
-        const lblBloqueadas = document.createElement("label");
-        lblBloqueadas.htmlFor = chkIdBloq;
-        lblBloqueadas.textContent = "Mostrar tareas bloqueadas";
-        toggleBloqueadas.appendChild(chkBloqueadas);
-        toggleBloqueadas.appendChild(lblBloqueadas);
-        togglesWrap.appendChild(toggleBloqueadas);
-
-        const toggleCompletadas = document.createElement("div");
-        toggleCompletadas.className = "kanban-toggle-grupo";
-        const chkIdComp = `kanban-mostrar-completadas-${Date.now()}`;
-        const chkCompletadas = document.createElement("input");
-        chkCompletadas.type = "checkbox";
-        chkCompletadas.id = chkIdComp;
-        chkCompletadas.checked = mostrarCompletadas;
-        chkCompletadas.addEventListener("change", () => setMostrarCompletadas(chkCompletadas.checked));
-        const lblCompletadas = document.createElement("label");
-        lblCompletadas.htmlFor = chkIdComp;
-        lblCompletadas.textContent = "Mostrar tareas completadas";
-        toggleCompletadas.appendChild(chkCompletadas);
-        toggleCompletadas.appendChild(lblCompletadas);
-        togglesWrap.appendChild(toggleCompletadas);
-
-        header.appendChild(togglesWrap);
         seccion.appendChild(header);
 
         const columnas = document.createElement("div");
@@ -2222,7 +2745,7 @@ export const KanbanUI = {
 
         const indiceProyecto = new Map();
         if (!proyectoFiltro) {
-            KanbanUI._agruparPorProyecto(tareas).forEach((g, i) => indiceProyecto.set(g.nombre, i));
+            KanbanUI._agruparPorProyecto(tareasVisibles).forEach((g, i) => indiceProyecto.set(g.nombre, i));
         }
 
         const clasesColumna = {
@@ -2266,14 +2789,14 @@ export const KanbanUI = {
 
                     grupo.tareas.forEach(t => {
                         grupoEl.appendChild(
-                            KanbanUI._crearTarjeta(t, mapa, db, dbPath, true, onRefresh)
+                            KanbanUI._crearTarjeta(t, mapaCompleto, db, dbPath, true, onRefresh)
                         );
                     });
                     body.appendChild(grupoEl);
                 });
             } else {
                 tareasCol.forEach(t => {
-                    body.appendChild(KanbanUI._crearTarjeta(t, mapa, db, dbPath, false, onRefresh));
+                    body.appendChild(KanbanUI._crearTarjeta(t, mapaCompleto, db, dbPath, false, onRefresh));
                 });
             }
 
@@ -2354,26 +2877,14 @@ export const KanbanUI = {
         contenedor.appendChild(wrapper);
     },
 
-    renderDashboard: async (mainContainer, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas, mostrarCompletadas, setMostrarCompletadas) => {
-        while (mainContainer.firstChild) {
-            mainContainer.removeChild(mainContainer.firstChild);
-        }
-
-        const layout = document.createElement("div");
-        layout.className = "kanban-layout-principal";
-        mainContainer.appendChild(layout);
-
+    _prepararDatosDashboard: (db, proyectoFiltro, mostrarBloqueadas, mostrarCompletadas) => {
         let tareasTodas = [];
         try {
             tareasTodas = KanbanDB.obtenerTodas(db);
             const archivados = new Set(KanbanDB.obtenerNombresProyectosArchivados(db));
-            tareasTodas = tareasTodas.filter(t => !archivados.has(t.proyecto));
+            tareasTodas = tareasTodas.filter(t => !archivados.has(t.proyecto) && !t.archivada);
         } catch (err) {
-            const errEl = document.createElement("p");
-            errEl.style.color = "var(--text-error)";
-            errEl.textContent = "❌ Error leyendo tareas: " + err.message;
-            layout.appendChild(errEl);
-            return;
+            return { error: err };
         }
 
         if (proyectoFiltro) {
@@ -2390,22 +2901,117 @@ export const KanbanUI = {
         }
 
         const numCompletadas = tareasFiltradasGeneral.filter(t => t.estado === "Terminado").length;
-        const tareas = mostrarCompletadas
+        const mapaCompleto = new Map(tareasFiltradasGeneral.map(t => [t.id, t]));
+        KanbanUI._mostrarCompletadas = mostrarCompletadas;
+        KanbanUI._mostrarBloqueadas = mostrarBloqueadas;
+
+        let tareas = mostrarCompletadas
             ? tareasFiltradasGeneral
             : tareasFiltradasGeneral.filter(t => t.estado !== "Terminado");
 
-        KanbanUI._renderPanelSuperior(layout, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro);
-        
+        const numBloqueadas = tareas.filter(t => KanbanUI._esBloqueada(t, mapaCompleto)).length;
+        const tareasVista = mostrarBloqueadas
+            ? tareas
+            : tareas.filter(t => !KanbanUI._esBloqueada(t, mapaCompleto));
+
+        return {
+            numCompletadas,
+            mapaCompleto,
+            tareasVista,
+            numBloqueadas,
+            vistaOpts: {
+                mostrarBloqueadas,
+                mostrarCompletadas,
+                numBloqueadas
+            }
+        };
+    },
+
+    _renderContenidoDashboard: async (
+        layout, datos, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro
+    ) => {
         if (proyectoFiltro) {
-            await KanbanUI._renderMapa(layout, tareas, proyectoFiltro, db, dbPath, onRefresh);
+            await KanbanUI._renderMapa(layout, datos.tareasVista, proyectoFiltro, db, dbPath, onRefresh);
         } else {
             KanbanUI._renderMenuProyectos(layout, db, onRefresh, setProyectoFiltro);
         }
 
         KanbanUI._renderKanban(
-            layout, tareas, db, dbPath, onRefresh, proyectoFiltro,
-            mostrarBloqueadas, setMostrarBloqueadas,
-            mostrarCompletadas, setMostrarCompletadas, numCompletadas
+            layout, datos.tareasVista, datos.mapaCompleto, db, dbPath, onRefresh, proyectoFiltro,
+            datos.vistaOpts.mostrarBloqueadas, datos.vistaOpts.mostrarCompletadas,
+            datos.numCompletadas, datos.numBloqueadas
+        );
+    },
+
+    actualizarVistaDashboard: async (
+        mainContainer, db, dbPath, onRefresh, onRefreshVista, proyectoFiltro,
+        setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas,
+        mostrarCompletadas, setMostrarCompletadas
+    ) => {
+        const layout = mainContainer.querySelector(".kanban-layout-principal");
+        if (!layout) {
+            await KanbanUI.renderDashboard(
+                mainContainer, db, dbPath, onRefresh, onRefreshVista, proyectoFiltro,
+                setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas,
+                mostrarCompletadas, setMostrarCompletadas
+            );
+            return;
+        }
+
+        const datos = KanbanUI._prepararDatosDashboard(db, proyectoFiltro, mostrarBloqueadas, mostrarCompletadas);
+        if (datos.error) return;
+
+        datos.vistaOpts.setMostrarBloqueadas = setMostrarBloqueadas;
+        datos.vistaOpts.setMostrarCompletadas = setMostrarCompletadas;
+
+        layout.querySelectorAll(
+            ".kanban-seccion-mapa, .kanban-seccion-tablero, .kanban-seccion-proyectos-menu"
+        ).forEach(el => el.remove());
+
+        const panel = layout.querySelector(".kanban-panel-superior");
+        if (panel) KanbanUI._sincronizarBotonesVista(panel, datos.vistaOpts);
+
+        await KanbanUI._renderContenidoDashboard(
+            layout, datos, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro
+        );
+    },
+
+    renderDashboard: async (
+        mainContainer, db, dbPath, onRefresh, onRefreshVista, proyectoFiltro,
+        setProyectoFiltro, mostrarBloqueadas, setMostrarBloqueadas,
+        mostrarCompletadas, setMostrarCompletadas
+    ) => {
+        while (mainContainer.firstChild) {
+            mainContainer.removeChild(mainContainer.firstChild);
+        }
+
+        const layout = document.createElement("div");
+        layout.className = "kanban-layout-principal";
+        mainContainer.appendChild(layout);
+
+        const datos = KanbanUI._prepararDatosDashboard(
+            db, proyectoFiltro, mostrarBloqueadas, mostrarCompletadas
+        );
+        if (datos.error) {
+            const errEl = document.createElement("p");
+            errEl.style.color = "var(--text-error)";
+            errEl.textContent = "❌ Error leyendo tareas: " + datos.error.message;
+            layout.appendChild(errEl);
+            return;
+        }
+
+        const vistaOpts = {
+            ...datos.vistaOpts,
+            setMostrarBloqueadas,
+            setMostrarCompletadas
+        };
+
+        KanbanUI._renderPanelSuperior(
+            layout, db, dbPath, onRefresh, onRefreshVista, proyectoFiltro, setProyectoFiltro, vistaOpts
+        );
+
+        await KanbanUI._renderContenidoDashboard(
+            layout, datos, db, dbPath, onRefresh, proyectoFiltro, setProyectoFiltro
         );
     }
 };

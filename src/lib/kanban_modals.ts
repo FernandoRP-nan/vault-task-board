@@ -2,6 +2,7 @@
 // @ts-nocheck
 import { KanbanDB } from "./kanban_db";
 import { KanbanNotes } from "./kanban_notes";
+import { KanbanStructureExport } from "./kanban_structure_export";
 import { Modal, Setting, SuggestModal, Notice } from "obsidian";
 
 // kanban_modals.js - Modales nativos para crear y editar tareas
@@ -17,6 +18,98 @@ function enlazarTextareaAuto(el) {
     ajustarAlturaTextarea(el);
     // Ejecutar en el siguiente ciclo por si el elemento aún no se ha añadido al DOM
     setTimeout(() => ajustarAlturaTextarea(el), 0);
+}
+
+function estiloBtnChecklistIcono() {
+    return [
+        "width:36px",
+        "height:36px",
+        "min-width:36px",
+        "padding:0",
+        "border-radius:50%",
+        "border:1px solid var(--background-modifier-border)",
+        "background:var(--background-secondary)",
+        "cursor:pointer",
+        "font-size:1em",
+        "line-height:1",
+        "display:inline-flex",
+        "align-items:center",
+        "justify-content:center",
+        "flex:0 0 auto",
+        "box-sizing:border-box"
+    ].join(";");
+}
+
+/** Ancho y centrado del modal de gestión (proyectos / tareas). */
+function ajustarModalGestor(contentEl) {
+    const modal = contentEl.closest(".modal");
+    const container = contentEl.closest(".modal-container");
+    if (container) {
+        container.style.setProperty("display", "flex", "important");
+        container.style.setProperty("align-items", "center", "important");
+        container.style.setProperty("justify-content", "center", "important");
+        container.style.setProperty("width", "100%", "important");
+        container.style.setProperty("max-width", "100%", "important");
+        container.style.setProperty("height", "100%", "important");
+    }
+    if (modal) {
+        modal.style.setProperty("width", "min(92vw, 680px)", "important");
+        modal.style.setProperty("max-width", "92vw", "important");
+        modal.style.setProperty("margin", "auto", "important");
+        modal.style.setProperty("max-height", "90vh", "important");
+    }
+}
+
+/** Aplica estilos inline con prioridad sobre el tema de Obsidian. */
+function aplicarEstilosGestor(el, props) {
+    for (const [prop, valor] of Object.entries(props)) {
+        el.style.setProperty(prop, valor, "important");
+    }
+}
+
+function aplicarLayoutGestorFila(fila, info, acciones) {
+    aplicarEstilosGestor(fila, {
+        display: "flex",
+        "flex-flow": "row nowrap",
+        "align-items": "center",
+        "justify-content": "space-between",
+        gap: "12px",
+        width: "100%",
+        "box-sizing": "border-box"
+    });
+    aplicarEstilosGestor(info, {
+        flex: "1 1 auto",
+        "min-width": "0",
+        display: "flex",
+        "flex-direction": "column",
+        gap: "2px",
+        overflow: "hidden"
+    });
+    aplicarEstilosGestor(acciones, {
+        display: "inline-flex",
+        "flex-flow": "row nowrap",
+        flex: "0 0 auto",
+        gap: "6px",
+        "align-items": "center",
+        "align-self": "center",
+        "flex-shrink": "0"
+    });
+}
+
+function crearBtnGestor(parent, texto, cls, onclick) {
+    const btn = parent.createEl("button", { text: texto, cls });
+    aplicarEstilosGestor(btn, {
+        display: "inline-flex",
+        width: "auto",
+        "min-width": "0",
+        "max-width": "none",
+        flex: "0 0 auto",
+        "flex-shrink": "0",
+        "white-space": "nowrap",
+        margin: "0"
+    });
+    btn.onclick = onclick;
+    return btn;
 }
 
 function crearTextareaSubtarea(valor = "") {
@@ -293,30 +386,24 @@ class TareaFormModal extends Modal {
             text: esEdicion ? "✏️ Editar Tarea" : "🧪 Nueva Tarea",
             cls: "kanban-modal-tarea-titulo"
         });
-        contentEl.createEl("p", {
-            cls: "kanban-modal-atajos",
-            text: "Atajos: Enter en título → proyecto · Enter en nueva subtarea → añadir · Ctrl+Enter guardar · Ctrl+Shift+Enter añadir subtarea"
-        });
 
-        const formDoble = contentEl.createEl("div", { cls: "kanban-form-doble" });
-        const colIzq = formDoble.createEl("div", { cls: "kanban-form-columna kanban-form-columna-izq" });
-        const colDer = formDoble.createEl("div", { cls: "kanban-form-columna kanban-form-columna-der" });
-
-        const campo = (parent, label, crear) => {
-            const wrap = parent.createEl("div", { cls: "kanban-campo" });
+        const campo = (parent, label, crear, extraCls = "") => {
+            const wrap = parent.createEl("div", { cls: `kanban-campo${extraCls ? ` ${extraCls}` : ""}` });
             wrap.createEl("label", { text: label });
             return crear(wrap);
         };
 
-        const inTexto = campo(colIzq, "Texto de la tarea *:", w =>
-            w.createEl("input", { type: "text", placeholder: "Ej. Investigar componente X", cls: "kanban-input" })
+        const encabezado = contentEl.createEl("div", { cls: "kanban-form-encabezado" });
+        const inTexto = campo(encabezado, "Título *", w =>
+            w.createEl("input", { type: "text", placeholder: "Nombre de la tarea", cls: "kanban-input" })
         );
         if (esEdicion) inTexto.value = this.datos.texto;
 
-        const inProyecto = campo(colIzq, "Proyecto *:", w => {
+        const metaGrid = encabezado.createEl("div", { cls: "kanban-form-meta-grid" });
+        const inProyecto = campo(metaGrid, "Proyecto *", w => {
             const fila = w.createEl("div", { cls: "kanban-fila-proyecto" });
             const input = fila.createEl("input", {
-                type: "text", placeholder: "Escribe o selecciona un proyecto",
+                type: "text", placeholder: "Nombre del proyecto",
                 cls: "kanban-input", attr: { "data-kanban-in-proyecto": "1" }
             });
             const proyectosExistentes = KanbanDB.obtenerProyectos(this.db);
@@ -332,17 +419,21 @@ class TareaFormModal extends Modal {
         if (esEdicion) inProyecto.value = this.datos.proyecto;
         else if (this.proyectoPredeterminado) inProyecto.value = this.proyectoPredeterminado;
 
-        const inEstado = campo(colIzq, "Estado:", w => {
-            const sel = w.createEl("select", { cls: "kanban-input" });
+        const inEstado = campo(metaGrid, "Estado", w => {
+            const sel = w.createEl("select", { cls: "kanban-input kanban-input-estado" });
             ["Por Hacer", "En Proceso", "Terminado"].forEach(est => {
                 const opt = sel.createEl("option", { text: est, value: est });
                 if (esEdicion && this.datos.estado === est) opt.selected = true;
             });
             return sel;
-        });
+        }, "kanban-campo-estado");
 
-        const reqWrap = colIzq.createEl("div", { cls: "kanban-campo" });
-        reqWrap.createEl("label", { text: "Requisitos (dependencias):" });
+        const formDoble = contentEl.createEl("div", { cls: "kanban-form-doble" });
+        const colIzq = formDoble.createEl("div", { cls: "kanban-form-columna kanban-form-columna-izq" });
+        const colDer = formDoble.createEl("div", { cls: "kanban-form-columna kanban-form-columna-der" });
+
+        const reqWrap = colIzq.createEl("div", { cls: "kanban-seccion-form" });
+        reqWrap.createEl("h4", { text: "🔗 Requisitos", cls: "kanban-seccion-form-titulo" });
         const chipsContainer = reqWrap.createEl("div", { cls: "kanban-chips-requisitos" });
         const reqAcciones = reqWrap.createEl("div", { cls: "kanban-fila-acciones" });
 
@@ -402,16 +493,27 @@ class TareaFormModal extends Modal {
             renderChips();
         };
 
-        const subWrap = colIzq.createEl("div", { cls: "kanban-campo" });
-        subWrap.createEl("label", { text: "Checklist interna:" });
+        const subWrap = colIzq.createEl("div", { cls: "kanban-seccion-form" });
+        subWrap.createEl("h4", { text: "☑ Checklist", cls: "kanban-seccion-form-titulo" });
         const subLista = subWrap.createEl("div", { cls: "kanban-subtareas-lista" });
-        const subAcciones = subWrap.createEl("div", { cls: "kanban-fila-acciones" });
-        const inNuevaSub = subAcciones.createEl("textarea", {
-            placeholder: "Nueva subtarea… (Enter guarda · Shift+Enter línea nueva)",
-            cls: "kanban-input kanban-input-sub",
-            attr: { rows: "1" }
+        const subComposer = subWrap.createEl("div", { cls: "kanban-checklist-composer" });
+        subComposer.setAttr("style",
+            "display:flex;flex-flow:row nowrap;align-items:center;gap:8px;width:100%;box-sizing:border-box;margin-top:18px;padding:6px 10px 6px 14px;border-radius:24px;border:1px solid var(--background-modifier-border);background:var(--background-primary);"
+        );
+        const subCampo = subComposer.createEl("div", { cls: "kanban-checklist-campo" });
+        subCampo.setAttr("style", "flex:1 1 0%;min-width:0;display:block;");
+        const inNuevaSub = subCampo.createEl("input", {
+            type: "text",
+            placeholder: "Nueva subtarea…",
+            cls: "kanban-checklist-input"
         });
-        enlazarTextareaAuto(inNuevaSub);
+        inNuevaSub.setAttr("style",
+            "display:block;width:100%;min-width:0;border:none;background:transparent;box-shadow:none;outline:none;padding:8px 6px;margin:0;height:36px;font-size:0.95em;line-height:1.45;box-sizing:border-box;"
+        );
+        const subAcciones = subComposer.createEl("div", { cls: "kanban-checklist-composer-acciones" });
+        subAcciones.setAttr("style",
+            "display:flex;flex-flow:row nowrap;flex:0 0 auto;gap:6px;align-items:center;align-self:center;"
+        );
 
         inTexto.addEventListener("keydown", (e) => {
             if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -444,7 +546,8 @@ class TareaFormModal extends Modal {
                 const txt = crearTextareaSubtarea(st.texto);
                 txt.oninput = () => { st.texto = txt.value; };
                 fila.appendChild(txt);
-                const btnConvertir = fila.createEl("button", {
+                const accionesSub = fila.createEl("div", { cls: "kanban-subtarea-acciones" });
+                const btnConvertir = accionesSub.createEl("button", {
                     text: "⇢",
                     cls: "kanban-subtarea-convertir",
                     attr: { title: "Convertir en tarea y elegir prerequisito o postrequisito" }
@@ -495,7 +598,7 @@ class TareaFormModal extends Modal {
                         new Notice(`❌ ${err?.message || "No se pudo convertir la subtarea."}`);
                     }
                 };
-                fila.createEl("button", { text: "✕", cls: "kanban-subtarea-quitar" }).onclick = (e) => {
+                accionesSub.createEl("button", { text: "✕", cls: "kanban-subtarea-quitar" }).onclick = (e) => {
                     e.preventDefault();
                     this.subtareas.splice(idx, 1);
                     renderSubtareas();
@@ -510,38 +613,47 @@ class TareaFormModal extends Modal {
             if (!texto) return;
             this.subtareas.push({ texto, completado: false });
             inNuevaSub.value = "";
-            enlazarTextareaAuto(inNuevaSub);
+            inNuevaSub.focus();
             renderSubtareas();
         };
-        subAcciones.createEl("button", { text: "+ Añadir", attr: { title: "Añadir subtarea sin cerrar el formulario" } }).onclick = (e) => {
+        subAcciones.createEl("button", {
+            text: "➕",
+            cls: "kanban-checklist-btn-icono",
+            attr: { title: "Añadir subtarea", style: estiloBtnChecklistIcono() }
+        }).onclick = (e) => {
             e.preventDefault();
             agregarSub();
         };
 
         const btnNotaDerivada = subAcciones.createEl("button", {
-            text: "📄 Convertir a nota",
-            attr: { title: "Crea una nota .md en la bóveda y la vincula en la nota interna" }
+            text: "📄",
+            cls: "kanban-checklist-btn-icono",
+            attr: { title: "Convertir checklist a nota en la bóveda", style: estiloBtnChecklistIcono() }
         });
         const btnSubtareasATareas = subAcciones.createEl("button", {
-            text: "⇢ Todas a tareas",
-            attr: { title: "Convierte cada subtarea en tarea real; eliges prerequisito o postrequisito" }
+            text: "⇢",
+            cls: "kanban-checklist-btn-icono",
+            attr: { title: "Convertir todas las subtareas en tareas", style: estiloBtnChecklistIcono() }
         });
         const actualizarBtnNotaDerivada = () => {
             const ruta = KanbanDB.extraerRutaNotaChecklist(inNota?.value || this.datos?.nota);
-            btnNotaDerivada.textContent = ruta ? "📄 Abrir nota derivada" : "📄 Convertir a nota";
+            btnNotaDerivada.textContent = "📄";
+            btnNotaDerivada.title = ruta
+                ? `Abrir nota derivada: ${ruta}`
+                : "Convertir checklist a nota en la bóveda";
         };
 
-        const notaWrap = colDer.createEl("div", { cls: "kanban-campo kanban-campo-nota" });
-        notaWrap.createEl("label", { text: "Nota interna:" });
+        const notaWrap = colDer.createEl("div", { cls: "kanban-seccion-form kanban-campo-nota" });
+        notaWrap.createEl("h4", { text: "📝 Nota", cls: "kanban-seccion-form-titulo" });
         const inNota = notaWrap.createEl("textarea", {
-            placeholder: "Detalles, enlaces, recordatorios, pasos...",
+            placeholder: "Detalles, enlaces, pasos…",
             cls: "kanban-input-nota kanban-input-nota-amplia"
         });
         if (esEdicion && this.datos.nota) inNota.value = this.datos.nota;
         actualizarBtnNotaDerivada();
 
-        const imgWrap = colDer.createEl("div", { cls: "kanban-campo" });
-        imgWrap.createEl("label", { text: "Imágenes adjuntas:" });
+        const imgWrap = colDer.createEl("div", { cls: "kanban-seccion-form" });
+        imgWrap.createEl("h4", { text: "📷 Imágenes", cls: "kanban-seccion-form-titulo" });
         const imgGaleria = imgWrap.createEl("div", { cls: "kanban-imagenes-galeria" });
         const imgAcciones = imgWrap.createEl("div", { cls: "kanban-fila-acciones" });
 
@@ -584,7 +696,7 @@ class TareaFormModal extends Modal {
         };
 
         const proyectosExistentes = KanbanDB.obtenerProyectos(this.db);
-        const btnElegirProyecto = colIzq.querySelector("[data-kanban-proyecto-btn]");
+        const btnElegirProyecto = contentEl.querySelector("[data-kanban-proyecto-btn]");
         if (btnElegirProyecto) {
             btnElegirProyecto.onclick = (e) => {
                 e.preventDefault();
@@ -865,8 +977,8 @@ class ProyectosGestionModal extends Modal {
 
         const lista = seccion.createEl("div", { cls: "kanban-proyectos-lista" });
         proyectos.forEach(p => {
-            const fila = lista.createEl("div", { cls: "kanban-proyecto-fila" });
-            const info = fila.createEl("div", { cls: "kanban-proyecto-info" });
+            const fila = lista.createEl("div", { cls: "kanban-gestor-fila" });
+            const info = fila.createEl("div", { cls: "kanban-gestor-info" });
             info.createEl("div", {
                 text: `📁 ${p.nombre}`,
                 style: "font-weight: 600;"
@@ -874,11 +986,14 @@ class ProyectosGestionModal extends Modal {
             const tareasTxt = p.total === 1 ? "1 tarea" : `${p.total} tareas`;
             info.createEl("small", { text: tareasTxt, style: "color: var(--text-muted);" });
 
-            const btn = fila.createEl("button", {
-                text: esArchivado ? "↩️ Restaurar" : "📦 Archivar",
-                cls: esArchivado ? "kanban-proyecto-btn-restaurar" : "kanban-proyecto-btn-archivar"
-            });
-            btn.onclick = () => {
+            const acciones = fila.createEl("div", { cls: "kanban-gestor-acciones" });
+            aplicarLayoutGestorFila(fila, info, acciones);
+
+            crearBtnGestor(
+                acciones,
+                esArchivado ? "↩️ Restaurar" : "📦 Archivar",
+                esArchivado ? "kanban-gestor-btn-restaurar" : "kanban-gestor-btn-archivar",
+                () => {
                 const accion = esArchivado ? "restaurar" : "archivar";
                 const verbo = esArchivado ? "restaurar" : "archivar";
                 if (!confirm(`¿${verbo.charAt(0).toUpperCase() + verbo.slice(1)} el proyecto "${p.nombre}"?`)) return;
@@ -902,13 +1017,9 @@ class ProyectosGestionModal extends Modal {
                     console.error(`Error al ${accion} proyecto:`, err);
                     new Notice(`❌ No se pudo ${verbo} el proyecto.`);
                 }
-            };
-
-            const btnEliminar = fila.createEl("button", {
-                text: "🗑️ Borrar",
-                style: "color: var(--text-error); border-color: var(--text-error); margin-left: 8px;"
             });
-            btnEliminar.onclick = () => {
+
+            crearBtnGestor(acciones, "🗑️ Borrar", "kanban-gestor-btn-borrar", () => {
                 let mensaje = `¿Eliminar permanentemente el proyecto "${p.nombre}" y TODAS sus tareas asociadas?\nEsta acción no se puede deshacer.`;
                 if (p.total > 0) {
                     mensaje += `\n\nSe eliminarán ${p.total} tarea(s).`;
@@ -929,12 +1040,15 @@ class ProyectosGestionModal extends Modal {
                     console.error("Error al eliminar proyecto:", err);
                     new Notice("❌ No se pudo eliminar el proyecto.");
                 }
-            };
+            });
         });
     }
 
     onOpen() {
         const { contentEl } = this;
+        contentEl.addClass("kanban-modal-gestor");
+        ajustarModalGestor(contentEl);
+        requestAnimationFrame(() => ajustarModalGestor(contentEl));
         contentEl.createEl("h2", {
             text: "📦 Gestionar Proyectos",
             style: "margin-top: 0; margin-bottom: 8px; color: var(--text-accent);"
@@ -963,6 +1077,280 @@ class ProyectosGestionModal extends Modal {
         this._renderLista(secArchivados, archivados, true);
 
         const acciones = contentEl.createEl("div", { cls: "kanban-formulario-acciones" });
+        acciones.createEl("button", { text: "Cerrar" }).onclick = () => this.close();
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class TareasGestionModal extends Modal {
+    constructor(app, db, dbPath, onSaved, onEditTarea) {
+        super(app);
+        this.db = db;
+        this.dbPath = dbPath;
+        this.onSaved = onSaved;
+        this.onEditTarea = onEditTarea;
+        this.filtroProyecto = "";
+    }
+
+    _estadoIcono(estado) {
+        if (estado === "Terminado") return "✅";
+        if (estado === "En Proceso") return "🔄";
+        return "⏳";
+    }
+
+    _renderLista(seccion, tareas, esArchivada) {
+        if (tareas.length === 0) {
+            seccion.createEl("p", {
+                text: esArchivada ? "No hay tareas archivadas." : "No hay tareas activas.",
+                style: "color: var(--text-muted); font-style: italic; margin: 0 0 12px 0;"
+            });
+            return;
+        }
+
+        const lista = seccion.createEl("div", { cls: "kanban-proyectos-lista" });
+        tareas.forEach(t => {
+            const fila = lista.createEl("div", { cls: "kanban-gestor-fila" });
+            const info = fila.createEl("div", { cls: "kanban-gestor-info" });
+            info.createEl("div", {
+                text: `${this._estadoIcono(t.estado)} ${t.texto}`
+            });
+            const meta = `📁 ${t.proyecto} · ID ${t.id}`;
+            const deps = (t.requisito_ids || []).length;
+            info.createEl("small", {
+                text: deps ? `${meta} · ${deps} requisito(s)` : meta,
+                style: "color: var(--text-muted);"
+            });
+
+            const acciones = fila.createEl("div", { cls: "kanban-gestor-acciones" });
+            aplicarLayoutGestorFila(fila, info, acciones);
+
+            crearBtnGestor(acciones, "✏️ Editar", "kanban-gestor-btn-editar", () => {
+                this.close();
+                this.onEditTarea?.(this.db, this.dbPath, t.id, this.onSaved);
+            });
+
+            crearBtnGestor(
+                acciones,
+                esArchivada ? "↩️ Mostrar" : "👁️ Ocultar",
+                esArchivada ? "kanban-gestor-btn-restaurar" : "kanban-gestor-btn-archivar",
+                () => {
+                const verbo = esArchivada ? "mostrar" : "ocultar";
+                if (!confirm(`¿${verbo.charAt(0).toUpperCase() + verbo.slice(1)} la tarea "${t.texto}"?`)) return;
+                try {
+                    if (esArchivada) {
+                        KanbanDB.restaurarTarea(this.db, this.dbPath, t.id);
+                        new Notice(`↩️ Tarea "${t.texto}" visible de nuevo.`);
+                    } else {
+                        KanbanDB.archivarTarea(this.db, this.dbPath, t.id);
+                        new Notice(`👁️ Tarea "${t.texto}" oculta del tablero.`);
+                    }
+                    this.onSaved();
+                    this.contentEl.empty();
+                    this.onOpen();
+                } catch (err) {
+                    console.error(`Error al ${verbo} tarea:`, err);
+                    new Notice(`❌ No se pudo ${verbo} la tarea.`);
+                }
+            });
+
+            crearBtnGestor(acciones, "🗑️ Borrar", "kanban-gestor-btn-borrar", () => {
+                if (!confirm(`¿Eliminar la tarea "${t.texto}"?\nIrá a la papelera durante 30 días.`)) return;
+                try {
+                    KanbanDB.eliminarTarea(this.db, this.dbPath, t.id);
+                    new Notice(`🗑️ Tarea "${t.texto}" eliminada.`);
+                    this.onSaved();
+                    this.contentEl.empty();
+                    this.onOpen();
+                } catch (err) {
+                    console.error("Error al eliminar tarea:", err);
+                    new Notice("❌ No se pudo eliminar la tarea.");
+                }
+            });
+        });
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.addClass("kanban-modal-gestor");
+        ajustarModalGestor(contentEl);
+        requestAnimationFrame(() => ajustarModalGestor(contentEl));
+        contentEl.createEl("h2", {
+            text: "🧪 Gestionar Tareas",
+            style: "margin-top: 0; margin-bottom: 8px; color: var(--text-accent);"
+        });
+        contentEl.createEl("p", {
+            text: "Las tareas ocultas dejan de mostrarse en el tablero y el mapa. Puedes restaurarlas o eliminarlas a la papelera.",
+            style: "color: var(--text-muted); font-size: 0.9em; margin: 0 0 16px 0;"
+        });
+
+        const archivadosProy = new Set(KanbanDB.obtenerNombresProyectosArchivados(this.db));
+        let todas = KanbanDB.obtenerTodas(this.db);
+        if (this.filtroProyecto) {
+            todas = todas.filter(t => t.proyecto === this.filtroProyecto);
+        }
+
+        const filtroWrap = contentEl.createEl("div", { cls: "kanban-gestor-filtro" });
+        filtroWrap.createEl("label", { text: "📂 Filtrar por proyecto:" });
+        const select = filtroWrap.createEl("select", { cls: "kanban-filtro-select" });
+        const optTodos = select.createEl("option", { value: "", text: "Todos" });
+        KanbanDB.obtenerProyectos(this.db, { soloActivos: false }).forEach(p => {
+            select.createEl("option", { value: p.nombre, text: p.nombre });
+        });
+        select.value = this.filtroProyecto;
+        select.onchange = () => {
+            this.filtroProyecto = select.value;
+            this.contentEl.empty();
+            this.onOpen();
+        };
+
+        const activas = todas.filter(t => !t.archivada);
+        const archivadas = todas.filter(t => t.archivada);
+
+        const secActivas = contentEl.createEl("div", { cls: "kanban-proyectos-seccion" });
+        secActivas.createEl("h3", {
+            text: `Visibles (${activas.length})`,
+            cls: "kanban-gestor-seccion-titulo"
+        });
+        this._renderLista(secActivas, activas, false);
+
+        const secArchivadas = contentEl.createEl("div", { cls: "kanban-proyectos-seccion" });
+        secArchivadas.createEl("h3", {
+            text: `Ocultas (${archivadas.length})`,
+            cls: "kanban-gestor-seccion-titulo kanban-gestor-seccion-titulo--muted"
+        });
+        this._renderLista(secArchivadas, archivadas, true);
+
+        if (archivadosProy.size > 0) {
+            contentEl.createEl("p", {
+                text: `ℹ️ ${archivadosProy.size} proyecto(s) archivado(s): sus tareas no aparecen en el tablero.`,
+                style: "color: var(--text-muted); font-size: 0.85em; margin-top: 12px;"
+            });
+        }
+
+        const acciones = contentEl.createEl("div", { cls: "kanban-formulario-acciones" });
+        acciones.createEl("button", { text: "Cerrar" }).onclick = () => this.close();
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class EstructuraVaultModal extends Modal {
+    constructor(app, db) {
+        super(app);
+        this.db = db;
+        this.modo = "json";
+        this.payload = KanbanStructureExport.construir(db);
+    }
+
+    _textoModo() {
+        if (this.modo === "toon") return KanbanStructureExport.aToon(this.payload);
+        if (this.modo === "ejemplo") return KanbanStructureExport.textoEjemploIA();
+        return KanbanStructureExport.aJson(this.payload);
+    }
+
+    _renderCuerpo() {
+        const { contentEl } = this;
+        const area = contentEl.querySelector(".kanban-estructura-editor");
+        if (area) {
+            area.value = this._textoModo();
+            this._ajustarEditor(area);
+        }
+    }
+
+    _copiar(texto) {
+        void navigator.clipboard.writeText(texto).then(
+            () => new Notice("📋 Copiado al portapapeles."),
+            () => new Notice("❌ No se pudo copiar.")
+        );
+    }
+
+    _ajustarTamanoModal() {
+        const modal = this.contentEl.closest(".modal");
+        const container = this.contentEl.closest(".modal-container");
+        if (container) {
+            container.style.setProperty("display", "flex", "important");
+            container.style.setProperty("align-items", "center", "important");
+            container.style.setProperty("justify-content", "center", "important");
+            container.style.setProperty("width", "100%", "important");
+            container.style.setProperty("max-width", "100%", "important");
+            container.style.setProperty("height", "100%", "important");
+        }
+        if (modal) {
+            modal.style.setProperty("width", "min(96vw, 1400px)", "important");
+            modal.style.setProperty("max-width", "96vw", "important");
+            modal.style.setProperty("margin", "auto", "important");
+            modal.style.setProperty("max-height", "94vh", "important");
+        }
+    }
+
+    _ajustarEditor(editor) {
+        const alto = `${Math.max(480, Math.floor(window.innerHeight * 0.72))}px`;
+        editor.style.width = "100%";
+        editor.style.boxSizing = "border-box";
+        editor.style.minHeight = alto;
+        editor.style.height = alto;
+        editor.style.flex = "1 1 auto";
+        editor.style.fontSize = "1.05em";
+        editor.style.lineHeight = "1.65";
+        editor.style.padding = "18px 20px";
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.addClass("kanban-modal-estructura");
+        this._ajustarTamanoModal();
+        contentEl.setAttr("style", "display:flex;flex-direction:column;width:100%;min-height:0;flex:1 1 auto;box-sizing:border-box;");
+        contentEl.createEl("h2", {
+            text: "🗂️ Ver estructura",
+            style: "margin-top: 0; margin-bottom: 10px; color: var(--text-accent); flex-shrink: 0;"
+        });
+
+        const tabs = contentEl.createEl("div", { cls: "kanban-estructura-tabs" });
+        const modos = [
+            { id: "json", label: "JSON" },
+            { id: "toon", label: "TOON" },
+            { id: "ejemplo", label: "Ejemplo IA" }
+        ];
+        modos.forEach(m => {
+            const btn = tabs.createEl("button", {
+                text: m.label,
+                cls: `kanban-estructura-tab${this.modo === m.id ? " is-active" : ""}`
+            });
+            btn.onclick = () => {
+                this.modo = m.id;
+                contentEl.querySelectorAll(".kanban-estructura-tab").forEach((el, i) => {
+                    el.classList.toggle("is-active", modos[i].id === m.id);
+                });
+                this._renderCuerpo();
+            };
+        });
+
+        const editor = contentEl.createEl("textarea", {
+            cls: "kanban-estructura-editor",
+            attr: { spellcheck: "false" }
+        });
+        editor.value = this._textoModo();
+        this._ajustarEditor(editor);
+        requestAnimationFrame(() => {
+            this._ajustarTamanoModal();
+            this._ajustarEditor(editor);
+            editor.focus();
+        });
+
+        const acciones = contentEl.createEl("div", { cls: "kanban-formulario-acciones" });
+        acciones.createEl("button", { text: "🔄 Actualizar" }).onclick = () => {
+            this.payload = KanbanStructureExport.construir(this.db);
+            this._renderCuerpo();
+            new Notice("Estructura actualizada desde la bóveda.");
+        };
+        acciones.createEl("button", { text: "📋 Copiar" }).onclick = () => {
+            this._copiar(editor.value);
+        };
         acciones.createEl("button", { text: "Cerrar" }).onclick = () => this.close();
     }
 
@@ -1152,6 +1540,8 @@ export const KanbanModals = {
     TareaRequisitoSuggestModal,
     ProyectoSuggestModal,
     ProyectosGestionModal,
+    TareasGestionModal,
+    EstructuraVaultModal,
     KanbanImagenSuggestModal,
     PapeleraModal,
     elegirVinculoSubtarea,

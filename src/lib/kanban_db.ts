@@ -77,6 +77,12 @@ export const KanbanDB = {
         return m ? m[1].trim() : "";
     },
 
+    /** ID de la tarea padre si la tarea proviene de una subtarea de checklist. */
+    extraerPadreDerivada: (nota) => {
+        const m = String(nota || "").match(/<!--\s*organizador-derivada:(\d+)\s*-->/);
+        return m ? parseInt(m[1], 10) : null;
+    },
+
     limpiarNotaParaVista: (nota) => String(nota || "")
         .replace(/\n?<!--\s*checklist-note:[^>]+-->/g, "")
         .replace(/\n?<!--\s*agenda:[^>]+-->/g, "")
@@ -117,6 +123,10 @@ export const KanbanDB = {
         }
         if (!nombres.includes("imagenes")) {
             db.run("ALTER TABLE tareas ADD COLUMN imagenes TEXT DEFAULT '[]'");
+            cambio = true;
+        }
+        if (!nombres.includes("archivada")) {
+            db.run("ALTER TABLE tareas ADD COLUMN archivada INTEGER DEFAULT 0");
             cambio = true;
         }
         if (cambio && dbPath) KanbanDB.guardar(db, dbPath);
@@ -253,7 +263,7 @@ export const KanbanDB = {
         const requisitosMap = KanbanDB._obtenerMapaRequisitos(db);
         const subtareasMap = KanbanDB._obtenerMapaSubtareas(db);
         const stmt = db.prepare(
-            "SELECT id, texto, proyecto, estado, requisito_id, nota, imagenes FROM tareas ORDER BY id ASC"
+            "SELECT id, texto, proyecto, estado, requisito_id, nota, imagenes, archivada FROM tareas ORDER BY id ASC"
         );
         const rows = [];
         while (stmt.step()) {
@@ -268,6 +278,7 @@ export const KanbanDB = {
                 requisito_ids: ids,
                 nota: r[5] || "",
                 imagenes: KanbanDB._parseImagenes(r[6]),
+                archivada: !!(r[7] ?? 0),
                 subtareas: subtareasMap.get(r[0]) || []
             });
         }
@@ -510,6 +521,16 @@ export const KanbanDB = {
     archivarProyecto: (db, dbPath, nombre) => {
         KanbanDB._sincronizarProyectosDesdeTareas(db);
         KanbanDB._registrarProyecto(db, nombre, 1);
+        KanbanDB.guardar(db, dbPath);
+    },
+
+    archivarTarea: (db, dbPath, tareaId) => {
+        db.run("UPDATE tareas SET archivada = 1 WHERE id = ?", [tareaId]);
+        KanbanDB.guardar(db, dbPath);
+    },
+
+    restaurarTarea: (db, dbPath, tareaId) => {
+        db.run("UPDATE tareas SET archivada = 0 WHERE id = ?", [tareaId]);
         KanbanDB.guardar(db, dbPath);
     },
 

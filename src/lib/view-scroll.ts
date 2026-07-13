@@ -42,6 +42,16 @@ export function prepareScrollableView(
     return host;
 }
 
+/** Restaura scrollTop tras re-render sin saltar al inicio. */
+export function restaurarScrollElemento(el: HTMLElement, scrollTop: number): void {
+    const aplicar = () => { el.scrollTop = scrollTop; };
+    aplicar();
+    requestAnimationFrame(() => {
+        aplicar();
+        requestAnimationFrame(aplicar);
+    });
+}
+
 export function injectViewScrollStyles(viewType: string): void {
     const id = `${STYLE_PREFIX}-${viewType}`;
     if (document.getElementById(id)) return;

@@ -4,7 +4,7 @@ import { KanbanDB } from "./lib/kanban_db";
 import { KanbanUI } from "./lib/kanban_ui";
 import { KanbanModals } from "./lib/kanban_modals";
 import { abrirBusquedaTareas } from "./lib/kanban_search";
-import { prepareScrollableView } from "./lib/view-scroll";
+import { prepareScrollableView, restaurarScrollElemento } from "./lib/view-scroll";
 import { TaskBoardBridgeFactory } from "./lib/task-board-bridge";
 import type { TaskBoardApi } from "./types";
 
@@ -98,7 +98,7 @@ interface UiAcciones {
 
 class TaskBoardView extends ItemView {
     private proyectoFiltro = "";
-    private mostrarBloqueadas = true;
+    private mostrarBloqueadas = false;
     private mostrarCompletadas = true;
     private scrollHost: HTMLElement | null = null;
     private ejecutarDashboard: (() => Promise<void>) | null = null;
@@ -189,20 +189,37 @@ class TaskBoardView extends ItemView {
 
             const ejecutar = async () => {
                 db = await KanbanDB.init(SQL, dbPath);
-                // Guardar la posición actual del scroll antes de vaciar el contenedor
                 const savedScrollTop = root.scrollTop;
                 root.empty();
                 await KanbanUI.renderDashboard(
-                    root, db, dbPath, refrescarTrasMutacion,
+                    root, db, dbPath, refrescarTrasMutacion, ejecutarVista,
                     this.proyectoFiltro,
                     (p: string) => { this.proyectoFiltro = p; void ejecutar(); },
                     this.mostrarBloqueadas,
-                    (v: boolean) => { this.mostrarBloqueadas = v; void ejecutar(); },
+                    (v: boolean) => { this.mostrarBloqueadas = v; },
                     this.mostrarCompletadas,
-                    (v: boolean) => { this.mostrarCompletadas = v; void ejecutar(); }
+                    (v: boolean) => { this.mostrarCompletadas = v; }
                 );
-                // Restaurar la posición de scroll guardada
-                root.scrollTop = savedScrollTop;
+                restaurarScrollElemento(root, savedScrollTop);
+                if (this.uiAcciones) {
+                    this.uiAcciones.db = db;
+                    this.uiAcciones.proyectoFiltro = this.proyectoFiltro;
+                }
+            };
+
+            const ejecutarVista = async () => {
+                db = await KanbanDB.init(SQL, dbPath);
+                const savedScrollTop = root.scrollTop;
+                await KanbanUI.actualizarVistaDashboard(
+                    root, db, dbPath, refrescarTrasMutacion, ejecutarVista,
+                    this.proyectoFiltro,
+                    (p: string) => { this.proyectoFiltro = p; void ejecutar(); },
+                    this.mostrarBloqueadas,
+                    (v: boolean) => { this.mostrarBloqueadas = v; },
+                    this.mostrarCompletadas,
+                    (v: boolean) => { this.mostrarCompletadas = v; }
+                );
+                restaurarScrollElemento(root, savedScrollTop);
                 if (this.uiAcciones) {
                     this.uiAcciones.db = db;
                     this.uiAcciones.proyectoFiltro = this.proyectoFiltro;
