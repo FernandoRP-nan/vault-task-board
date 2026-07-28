@@ -31,6 +31,23 @@ let sqlWasmRel = "";
 let sqlInstance: SqlJsStatic | null = null;
 const binCache = new Map<string, Uint8Array>();
 
+type SqlInitFn = (opts: { locateFile: () => string; wasmBinary: Uint8Array }) => Promise<SqlJsStatic>;
+
+/** Carga sql-wasm.js sin tocar module.exports del plugin (crítico en móvil). */
+function loadInitSqlJsFromScript(jsCode: string): SqlInitFn {
+    const shim: { exports: unknown } = { exports: {} };
+    const runner = new Function("module", "exports", jsCode) as (
+        module: { exports: unknown },
+        exports: unknown
+    ) => void;
+    runner(shim, shim.exports);
+    const initFn = shim.exports;
+    if (typeof initFn !== "function") {
+        throw new Error("sql-wasm.js no exportó initSqlJs.");
+    }
+    return initFn as SqlInitFn;
+}
+
 export function configureRuntime(app: App, opts: RuntimeConfigureOptions = {}): void {
     appRef = app;
     if (opts.sqlJsRel) sqlJsRel = opts.sqlJsRel;
@@ -227,10 +244,8 @@ export const ScriptsRuntime = {
             if (!(await ScriptsRuntime.existeAsync(jsPath))) {
                 throw new Error(`No se encontró ${jsPath} en el vault.`);
             }
-            eval(await appRef!.vault.adapter.read(jsPath));
-            initFn = (typeof (globalThis as Record<string, unknown>).initSqlJs !== "undefined"
-                ? (globalThis as Record<string, unknown>).initSqlJs
-                : require("module").exports) as typeof initFn;
+            const jsCode = await appRef!.vault.adapter.read(jsPath);
+            initFn = loadInitSqlJsFromScript(jsCode);
         }
 
         sqlInstance = await initFn({ locateFile: () => "", wasmBinary });
